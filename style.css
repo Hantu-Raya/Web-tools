@@ -1,0 +1,439 @@
+/**
+ * Image Cropper - Dark Mode Stylesheet
+ * 
+ * Color Palette:
+ * - Background Gradient: Deep Violet (#1a0a2e) to Midnight Blue (#0d1b2a)
+ * - Card Background: Dark Charcoal (#1e1e2e)
+ * - Primary Text: Off-White (#e4e4e7)
+ * - Secondary Text: Muted Gray (#a1a1aa)
+ * - Neon Accent Gradient: Electric Cyan (#00f5d4) to Vivid Magenta (#f72585)
+ * - Secondary Button: Slate (#2d2d3a)
+ */
+
+/* ============================================
+   CSS Reset & Base Styles
+   ============================================ */
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, 
+                 Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
+    
+    /* Deep Violet to Midnight Blue gradient */
+    background: linear-gradient(135deg, #1a0a2e 0%, #0d1b2a 50%, #0a0f1a 100%);
+    background-attachment: fixed;
+    color: #e4e4e7;
+    line-height: 1.6;
+}
+
+/* ============================================
+   Container - Glassmorphism Card
+   ============================================ */
+.container {
+    width: 100%;
+    max-width: 900px;
+    background: rgba(30, 30, 46, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 
+        0 25px 50px -12px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    padding: 2.5rem;
+    overflow: hidden;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.title {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #00f5d4 0%, #7b2cbf 50%, #f72585 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+}
+
+.subtitle {
+    font-size: 0.95rem;
+    color: #a1a1aa;
+    font-weight: 400;
+}
+
+/* ============================================
+   Drop Zone
+   ============================================ */
+.drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3.5rem 2rem;
+    border: 2px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 1rem;
+    background: rgba(45, 45, 58, 0.4);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    min-height: 280px;
+}
+
+.drop-zone:hover,
+.drop-zone--active {
+    border-color: #00f5d4;
+    background: rgba(0, 245, 212, 0.05);
+    transform: translateY(-2px);
+}
+
+.drop-zone__icon {
+    color: #a1a1aa;
+    margin-bottom: 1.25rem;
+    transition: color 0.25s ease, transform 0.25s ease;
+}
+
+.drop-zone:hover .drop-zone__icon {
+    color: #00f5d4;
+    transform: scale(1.1);
+}
+
+.drop-zone__text {
+    font-size: 1.1rem;
+    color: #e4e4e7;
+    margin-bottom: 0.5rem;
+}
+
+.drop-zone__text kbd {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+    background: rgba(0, 245, 212, 0.15);
+    border: 1px solid rgba(0, 245, 212, 0.3);
+    border-radius: 0.35rem;
+    color: #00f5d4;
+    margin: 0 0.15rem;
+}
+
+.drop-zone__hint {
+    font-size: 0.85rem;
+    color: #6b6b7b;
+}
+
+.drop-zone--hidden {
+    display: none;
+}
+
+/* ============================================
+   Editor Container
+   ============================================ */
+.editor-container {
+    display: none;
+}
+
+.editor-container--visible {
+    display: block;
+    animation: fadeIn 0.35s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================
+   Editor Layout (Cropper + Preview)
+   ============================================ */
+.editor-layout {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.cropper-wrapper {
+    width: 100%;
+    min-height: 300px;
+    max-height: 500px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 0.75rem;
+    overflow: visible; /* Allow rotated images to display */
+}
+
+.cropper-wrapper img {
+    display: block;
+    max-width: 100%;
+    /* Don't set max-height on img - let Cropper.js handle it */
+}
+
+/* ============================================
+   Live Preview Panel
+   ============================================ */
+.preview-panel {
+    display: flex;
+    flex-direction: column;
+    background: rgba(45, 45, 58, 0.5);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.preview-panel__title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #a1a1aa;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+    text-align: center;
+}
+
+.preview-container {
+    width: 100%;
+    height: 180px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(0, 245, 212, 0.2);
+}
+
+.preview-panel__hint {
+    font-size: 0.75rem;
+    color: #6b6b7b;
+    text-align: center;
+    margin-top: 0.75rem;
+    line-height: 1.4;
+}
+
+/* ============================================
+   Cropper.js Theme Overrides
+   ============================================ */
+.cropper-container {
+    border-radius: 0.75rem;
+}
+
+.cropper-view-box {
+    outline: 2px solid #00f5d4;
+    outline-color: rgba(0, 245, 212, 0.85);
+}
+
+.cropper-line {
+    background-color: #00f5d4;
+}
+
+.cropper-point {
+    background-color: #00f5d4;
+    width: 10px;
+    height: 10px;
+    opacity: 1;
+}
+
+.cropper-point.point-se {
+    width: 12px;
+    height: 12px;
+}
+
+.cropper-dashed {
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.cropper-modal {
+    background-color: rgba(10, 15, 26, 0.75);
+}
+
+/* ============================================
+   Controls
+   ============================================ */
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Base Button Styles */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    font-family: inherit;
+    border: none;
+    border-radius: 0.625rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.btn:focus-visible {
+    box-shadow: 0 0 0 3px rgba(0, 245, 212, 0.4);
+}
+
+/* Secondary Button (Icon buttons) */
+.btn--secondary {
+    background: #2d2d3a;
+    color: #e4e4e7;
+    min-width: 48px;
+    padding: 0.75rem;
+}
+
+.btn--secondary:hover {
+    background: #3d3d4a;
+    transform: translateY(-1px);
+}
+
+.btn--secondary:active {
+    transform: translateY(0);
+}
+
+/* Primary Button (Download - Neon Gradient) */
+.btn--primary {
+    background: linear-gradient(135deg, #00f5d4 0%, #7b2cbf 50%, #f72585 100%);
+    background-size: 200% 200%;
+    color: #fff;
+    font-weight: 600;
+    padding: 0.85rem 1.5rem;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: 
+        0 4px 15px rgba(0, 245, 212, 0.25),
+        0 2px 8px rgba(247, 37, 133, 0.2);
+    animation: gradientShift 4s ease infinite;
+}
+
+@keyframes gradientShift {
+    0%, 100% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+.btn--primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+        0 6px 20px rgba(0, 245, 212, 0.35),
+        0 4px 12px rgba(247, 37, 133, 0.3);
+}
+
+.btn--primary:active {
+    transform: translateY(0);
+}
+
+/* ============================================
+   Responsive Adjustments
+   ============================================ */
+@media (max-width: 640px) {
+    body {
+        padding: 1rem;
+        align-items: flex-start;
+        padding-top: 2rem;
+    }
+
+    .container {
+        padding: 1.5rem;
+        border-radius: 1rem;
+    }
+
+    .title {
+        font-size: 1.5rem;
+    }
+
+    .drop-zone {
+        padding: 2.5rem 1.5rem;
+        min-height: 220px;
+    }
+
+    .drop-zone__icon svg {
+        width: 48px;
+        height: 48px;
+    }
+
+    .editor-layout {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .cropper-wrapper {
+        min-height: 200px;
+        max-height: 350px;
+    }
+
+    .cropper-wrapper img {
+        /* Let Cropper.js handle sizing */
+    }
+
+    .preview-panel {
+        order: -1;
+    }
+
+    .preview-container {
+        height: 120px;
+    }
+
+    .controls {
+        gap: 0.5rem;
+    }
+
+    .btn--secondary {
+        min-width: 42px;
+        padding: 0.65rem;
+    }
+
+    .btn--primary {
+        padding: 0.75rem 1.25rem;
+        font-size: 0.85rem;
+    }
+}
+
+/* ============================================
+   Utility: Screen Reader Only
+   ============================================ */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

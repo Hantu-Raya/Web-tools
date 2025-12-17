@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Cropper | Paste-to-Crop</title>
+    
+    <!-- Cropper.js CSS (v1.6.2) - Local file -->
+    <link rel="stylesheet" href="cropper.min.css">
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="container">
+        <!-- Application Header -->
+        <header class="header">
+            <h1 class="title">Image Cropper</h1>
+            <p class="subtitle">Paste, crop, and download in seconds</p>
+        </header>
+
+        <!-- Drop Zone: Initial upload interface -->
+        <div id="dropZone" class="drop-zone">
+            <div class="drop-zone__icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                </svg>
+            </div>
+            <p class="drop-zone__text">Click to Upload or <kbd>Ctrl+V</kbd> to Paste</p>
+            <p class="drop-zone__hint">Supports PNG, JPG, GIF, WebP</p>
+        </div>
+
+        <!-- Hidden file input triggered by drop zone click -->
+        <input type="file" id="fileInput" accept="image/*" hidden>
+
+        <!-- Editor Container: Hidden by default, shown when image loaded -->
+        <div id="editorContainer" class="editor-container">
+            <div class="editor-layout">
+                <!-- Main Cropper Area -->
+                <div class="cropper-wrapper">
+                    <img id="cropperImage" src="" alt="Image to crop">
+                </div>
+                
+                <!-- Live Preview Panel -->
+                <div class="preview-panel">
+                    <h3 class="preview-panel__title">Live Preview</h3>
+                    <div id="previewContainer" class="preview-container">
+                        <!-- Cropper.js will inject preview here -->
+                    </div>
+                    <p class="preview-panel__hint">
+                        Drag on image to select crop area<br>
+                        Double-click to toggle move mode<br>
+                        Scroll to zoom
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Control Buttons -->
+            <div class="controls">
+                <button id="btnRotateLeft" class="btn btn--secondary" title="Rotate Left">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="1 4 1 10 7 10"/>
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                    </svg>
+                </button>
+                <button id="btnRotateRight" class="btn btn--secondary" title="Rotate Right">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                </button>
+                <button id="btnFlipH" class="btn btn--secondary" title="Flip Horizontal">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="16 3 21 3 21 8"/>
+                        <line x1="4" y1="20" x2="21" y2="3"/>
+                        <polyline points="21 16 21 21 16 21"/>
+                        <line x1="15" y1="15" x2="21" y2="21"/>
+                        <line x1="4" y1="4" x2="9" y2="9"/>
+                    </svg>
+                </button>
+                <button id="btnFlipV" class="btn btn--secondary" title="Flip Vertical">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="8 3 3 3 3 8"/>
+                        <line x1="20" y1="20" x2="3" y2="3"/>
+                        <polyline points="3 16 3 21 8 21"/>
+                        <line x1="9" y1="15" x2="3" y2="21"/>
+                        <line x1="20" y1="4" x2="15" y2="9"/>
+                    </svg>
+                </button>
+                <button id="btnReset" class="btn btn--secondary" title="Reset">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                        <path d="M3 3v5h5"/>
+                    </svg>
+                </button>
+                <button id="btnNewImage" class="btn btn--secondary" title="New Image">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                </button>
+                <button id="btnDownload" class="btn btn--primary" title="Download Cropped Image">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span>Download</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Cropper.js Script (v1.6.2) - Local file -->
+    <script src="cropper.min.js"></script>
+    
+    <!-- Custom Script -->
+    <script src="script.js"></script>
+</body>
+</html>
