@@ -1,6 +1,5 @@
 # Web-tools
 
-Project Files in D:\web\crop\
 | File | Size | Description |
 |------|------|-------------|
 | index.html | ~5 KB | Main HTML page with dark mode UI |
