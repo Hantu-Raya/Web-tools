@@ -151,30 +151,33 @@ class FilterEngine {
         // Clear existing filters
         obj.filters = [];
 
+        // Fabric.js v6: filters are in fabric.filters namespace
+        const filters = fabric.filters;
+
         // Brightness (-1 to 1)
         if (this.adjustments.brightness !== 0) {
-            obj.filters.push(new fabric.Image.filters.Brightness({
+            obj.filters.push(new filters.Brightness({
                 brightness: this.adjustments.brightness / 100
             }));
         }
 
         // Contrast (-1 to 1)
         if (this.adjustments.contrast !== 0) {
-            obj.filters.push(new fabric.Image.filters.Contrast({
+            obj.filters.push(new filters.Contrast({
                 contrast: this.adjustments.contrast / 100
             }));
         }
 
         // Saturation (-1 to 1)
         if (this.adjustments.saturation !== 0) {
-            obj.filters.push(new fabric.Image.filters.Saturation({
+            obj.filters.push(new filters.Saturation({
                 saturation: this.adjustments.saturation / 100
             }));
         }
 
         // Hue rotation
         if (this.adjustments.hue !== 0) {
-            obj.filters.push(new fabric.Image.filters.HueRotation({
+            obj.filters.push(new filters.HueRotation({
                 rotation: this.adjustments.hue / 180
             }));
         }
@@ -184,7 +187,7 @@ class FilterEngine {
             const gamma = this.adjustments.exposure > 0 
                 ? 1 + (this.adjustments.exposure / 100)
                 : 1 / (1 + Math.abs(this.adjustments.exposure) / 100);
-            obj.filters.push(new fabric.Image.filters.Gamma({
+            obj.filters.push(new filters.Gamma({
                 gamma: [gamma, gamma, gamma]
             }));
         }
@@ -201,26 +204,29 @@ class FilterEngine {
      * @private
      */
     _applyActiveFilter(obj) {
+        // Fabric.js v6: filters are in fabric.filters namespace
+        const filters = fabric.filters;
+        
         switch (this.activeFilter) {
             case 'grayscale':
-                obj.filters.push(new fabric.Image.filters.Grayscale());
+                obj.filters.push(new filters.Grayscale());
                 break;
             case 'sepia':
-                obj.filters.push(new fabric.Image.filters.Sepia());
+                obj.filters.push(new filters.Sepia());
                 break;
             case 'invert':
-                obj.filters.push(new fabric.Image.filters.Invert());
+                obj.filters.push(new filters.Invert());
                 break;
             case 'blur':
-                obj.filters.push(new fabric.Image.filters.Blur({ blur: 0.2 }));
+                obj.filters.push(new filters.Blur({ blur: 0.2 }));
                 break;
             case 'sharpen':
-                obj.filters.push(new fabric.Image.filters.Convolute({
+                obj.filters.push(new filters.Convolute({
                     matrix: [0, -1, 0, -1, 5, -1, 0, -1, 0]
                 }));
                 break;
             case 'emboss':
-                obj.filters.push(new fabric.Image.filters.Convolute({
+                obj.filters.push(new filters.Convolute({
                     matrix: [-2, -1, 0, -1, 1, 1, 0, 1, 2]
                 }));
                 break;
@@ -281,7 +287,7 @@ class FilterEngine {
     applyConvolution(matrix) {
         const activeObject = this.canvas.getActiveObject();
         if (activeObject && activeObject.type === 'image') {
-            activeObject.filters.push(new fabric.Image.filters.Convolute({
+            activeObject.filters.push(new fabric.filters.Convolute({
                 matrix: matrix
             }));
             activeObject.applyFilters();
@@ -300,7 +306,7 @@ class FilterEngine {
 
         targets.forEach(obj => {
             if (obj.type === 'image') {
-                obj.filters.push(new fabric.Image.filters.Blur({ blur: radius }));
+                obj.filters.push(new fabric.filters.Blur({ blur: radius }));
                 obj.applyFilters();
             }
         });
@@ -342,7 +348,7 @@ class FilterEngine {
         if (activeObject && activeObject.type === 'image') {
             // Posterize using color matrix
             const step = 255 / levels;
-            activeObject.filters.push(new fabric.Image.filters.Pixelate({
+            activeObject.filters.push(new fabric.filters.Pixelate({
                 blocksize: 1
             }));
             activeObject.applyFilters();
@@ -399,7 +405,7 @@ class FilterEngine {
         if (activeObject && activeObject.type === 'image') {
             const rgb = this._hexToRgb(color);
             if (rgb) {
-                activeObject.filters.push(new fabric.Image.filters.BlendColor({
+                activeObject.filters.push(new fabric.filters.BlendColor({
                     color: color,
                     mode: 'tint',
                     alpha: intensity

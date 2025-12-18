@@ -34,6 +34,14 @@ class PhotoLiteApp {
         this.textTool = new TextTool(this.canvasManager, this.historyManager);
         this.cropTool = new CropTool(this.canvasManager, this.historyManager);
         this.transformTool = new TransformTool(this.canvasManager, this.historyManager);
+        
+        // Set up crop tool completion callback to reset toolbar
+        this.cropTool.onComplete = () => {
+            this.setActiveTool('select');
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tool === 'select');
+            });
+        };
 
         // Current active tool
         this.activeTool = 'select';
@@ -59,6 +67,30 @@ class PhotoLiteApp {
 
         // Initial canvas setup
         this._setupInitialCanvas();
+
+        // Enforce tool constraints on new objects
+        this.canvasManager.canvas.on('object:added', (e) => {
+            const obj = e.target;
+            if (!obj) return;
+
+            if (this.activeTool === 'transform') {
+                obj.set({
+                    hasControls: true,
+                    hasBorders: true,
+                    lockRotation: false,
+                    lockScalingX: false,
+                    lockScalingY: false
+                });
+            } else if (this.activeTool === 'select') {
+                obj.set({
+                    hasControls: false,
+                    hasBorders: true,
+                    lockRotation: true,
+                    lockScalingX: true,
+                    lockScalingY: true
+                });
+            }
+        });
 
         console.log('✅ PhotoLite ready!');
     }
@@ -113,28 +145,35 @@ class PhotoLiteApp {
         // Activate new tool
         switch (toolName) {
             case 'select':
+                this.canvasManager.setPanMode(false);
+                // Ensure transform controls are disabled (selection only)
+                this.transformTool.deactivate();
                 this.canvasManager.canvas.selection = true;
                 this.canvasManager.canvas.defaultCursor = 'default';
                 break;
 
             case 'move':
-                this.canvasManager.canvas.selection = true;
-                this.canvasManager.canvas.defaultCursor = 'move';
+                // Hand tool (pan)
+                this.canvasManager.setPanMode(true);
                 break;
 
             case 'crop':
+                this.canvasManager.setPanMode(false);
                 this.cropTool.activate();
                 break;
 
             case 'transform':
+                this.canvasManager.setPanMode(false);
                 this.transformTool.activate();
                 break;
 
             case 'brush':
+                this.canvasManager.setPanMode(false);
                 this.brushTool.activate();
                 break;
 
             case 'eraser':
+                this.canvasManager.setPanMode(false);
                 this.brushTool.activateEraser();
                 break;
 
@@ -485,11 +524,17 @@ class PhotoLiteApp {
                 }
                 this.canvasManager.discardActiveObject();
                 this.setActiveTool('select');
+                
+                // Update toolbar UI
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tool === 'select');
+                });
             }
 
             // Enter to apply crop
             if (key === 'enter' && this.cropTool.isActive) {
                 this.cropTool.applyCrop();
+                // Toolbar will be reset by onComplete callback
             }
 
             // Bracket keys to adjust brush size
@@ -501,27 +546,8 @@ class PhotoLiteApp {
             }
         });
 
-        // Paste from clipboard
-        document.addEventListener('paste', async (e) => {
-            const items = e.clipboardData?.items;
-            if (items) {
-                for (const item of items) {
-                    if (item.type.startsWith('image/')) {
-                        const blob = item.getAsFile();
-                        if (blob) {
-                            const reader = new FileReader();
-                            reader.onload = async (event) => {
-                                await this.canvasManager.loadImage(event.target.result);
-                                document.getElementById('drop-zone')?.classList.add('hidden');
-                                this.historyManager.saveState(this.canvasManager.canvas, 'Paste Image');
-                            };
-                            reader.readAsDataURL(blob);
-                        }
-                        break;
-                    }
-                }
-            }
-        });
+        // Note: Clipboard paste is handled by FileHandler to ensure proper validation
+        // (MIME type, file size, and magic byte checks)
     }
 
     /**
@@ -551,6 +577,14 @@ class PhotoLiteApp {
      * Undo last action
      */
     async undo() {
+        // If crop tool is active, cancel it first
+        if (this.cropTool.isActive) {
+            this.cropTool.cancelCrop();
+            this.setActiveTool('select');
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tool === 'select');
+            });
+        }
         await this.historyManager.undo(this.canvasManager.canvas);
     }
 
@@ -558,6 +592,14 @@ class PhotoLiteApp {
      * Redo last undone action
      */
     async redo() {
+        // If crop tool is active, cancel it first
+        if (this.cropTool.isActive) {
+            this.cropTool.cancelCrop();
+            this.setActiveTool('select');
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tool === 'select');
+            });
+        }
         await this.historyManager.redo(this.canvasManager.canvas);
     }
 
@@ -594,5 +636,5 @@ class PhotoLiteApp {
 // Initialize application
 const photoLite = new PhotoLiteApp();
 
-// Expose globally for debugging
-window.photoLite = photoLite;
+// Note: Global exposure removed for security
+// Use browser DevTools to inspect application state if needed for debugging

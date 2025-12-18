@@ -1,7 +1,8 @@
 /**
  * =====================================================
  * PhotoLite - Brush Tool
- * Freehand drawing and true transparency eraser
+ * Freehand drawing with layer-aware eraser
+ * Uses fabric.Group for drawing layer isolation
  * =====================================================
  */
 
@@ -17,6 +18,9 @@ class BrushTool {
         this.brushSize = 10;
         this.brushColor = '#6366f1';
         this.brushOpacity = 1;
+        
+        // Drawing layer (fabric.Group) for isolating brush strokes
+        this.drawingLayer = null;
         
         // Brush types
         this.brushTypes = {
@@ -59,135 +63,326 @@ class BrushTool {
             this._updateBrush();
         });
 
-        // Canvas drawing events
+        // Canvas drawing events - use 'before:path:created' to intercept before the path is added
         this.canvas.on('path:created', (e) => {
             if (this.isActive) {
-                const path = e.path;
-                
-                if (this.isEraser) {
-                    // TRUE ERASER: Apply pixel-level erasing
-                    this._applyPixelEraser(path);
-                } else {
-                    // Normal brush stroke
-                    path.layerId = 'layer_' + Date.now();
-                    path.layerName = 'Brush Stroke';
-                    this.historyManager.saveState(this.canvas, 'Draw');
+                // Defer processing to next frame to avoid interfering with Fabric's brush state
+                requestAnimationFrame(() => {
+                    this._handlePathCreated(e.path);
+                });
+            }
+        });
+
+        // Ensure brush properly ends on mouse up
+        this.canvas.on('mouse:up', () => {
+            if (this.isActive && this.canvas.isDrawingMode) {
+                // Reset the freeDrawingBrush state to prevent continuous drawing
+                const brush = this.canvas.freeDrawingBrush;
+                if (brush && brush._reset) {
+                    brush._reset();
                 }
             }
         });
     }
 
     /**
-     * Apply pixel-level eraser using canvas compositing
-     * This creates true transparency by erasing pixels
+     * Handle path created event - add to drawing layer with proper compositing
+     * @private
+     * @param {fabric.Path} path - The created path
+     */
+    async _handlePathCreated(path) {
+        // Check if path is still valid and on canvas
+        if (!path || !this.canvas.getObjects().includes(path)) {
+            return;
+        }
+
+        // Remove path from main canvas (it was added automatically)
+        this.canvas.remove(path);
+
+        if (this.isEraser) {
+            // ERASER: Apply to BOTH drawing layer AND base image
+            await this._applyDualEraser(path);
+        } else {
+            // BRUSH: Normal drawing - add to drawing layer
+            this._ensureDrawingLayer();
+            
+            path.set({
+                globalCompositeOperation: 'source-over',
+                selectable: false,
+                evented: false
+            });
+
+            // Add path to the drawing layer group
+            this.drawingLayer.add(path);
+            
+            // Force re-render of the group's cache
+            this.drawingLayer.dirty = true;
+            this.drawingLayer.setCoords();
+            this.canvas.requestRenderAll();
+
+            // Save history
+            this.historyManager.saveState(this.canvas, 'Draw');
+
+            // Update layer manager
+            if (this.layerManager) {
+                this.layerManager.refresh();
+            }
+        }
+    }
+
+    /**
+     * Apply eraser to both drawing layer and base image
      * @private
      * @param {fabric.Path} eraserPath - The eraser stroke path
      */
-    _applyPixelEraser(eraserPath) {
-        // Remove the eraser path from canvas (we'll apply it via compositing)
-        this.canvas.remove(eraserPath);
+    async _applyDualEraser(eraserPath) {
+        // 1. Apply to drawing layer (if it exists and has content)
+        this._ensureDrawingLayer();
+        
+        // Only erase from drawing layer if it's not locked
+        if (this.drawingLayer && !this.drawingLayer.isLocked && this.drawingLayer.getObjects().length > 0) {
+            // Clone the path for the drawing layer
+            const drawingEraserPath = await eraserPath.clone();
+            drawingEraserPath.set({
+                globalCompositeOperation: 'destination-out',
+                stroke: 'rgba(255,255,255,1)',
+                selectable: false,
+                evented: false
+            });
+            
+            this.drawingLayer.add(drawingEraserPath);
+            this.drawingLayer.dirty = true;
+            this.drawingLayer.setCoords();
+        }
 
-        // Get canvas dimensions
+        // 2. Apply to base image(s) using pixel compositing
+        await this._applyEraserToImages(eraserPath);
+
+        // 3. Set canvas background to transparent so erased areas show transparency
+        this.canvas.backgroundColor = null;
+        
+        this.canvas.requestRenderAll();
+
+        // Save history
+        this.historyManager.saveState(this.canvas, 'Erase');
+
+        // Update layer manager
+        if (this.layerManager) {
+            this.layerManager.refresh();
+        }
+    }
+
+    /**
+     * Apply eraser to all image objects (base layers)
+     * @private
+     * @param {fabric.Path} eraserPath - The eraser stroke path
+     */
+    async _applyEraserToImages(eraserPath) {
+        // Find all image objects (excluding the drawing layer)
+        // AND exclude locked objects
+        const images = this.canvas.getObjects().filter(obj => 
+            obj.type === 'image' && 
+            obj.layerId !== 'drawing-layer' &&
+            !obj.isLocked
+        );
+
+        if (images.length === 0) return;
+
         const width = this.canvas.width;
         const height = this.canvas.height;
 
-        // Create temp canvas to render current state (without background)
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = width;
-        tempCanvas.height = height;
-        const ctx = tempCanvas.getContext('2d');
+        // Process each image
+        for (const imageObj of images) {
+            try {
+                // Create temp canvas for this image
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = width;
+                tempCanvas.height = height;
+                const ctx = tempCanvas.getContext('2d');
 
-        // Render all objects to temp canvas (preserve transparency)
-        const currentBg = this.canvas.backgroundColor;
-        this.canvas.backgroundColor = null;
-        
-        // Use fabric's renderAll to get the current state
-        const dataURL = this.canvas.toDataURL({
-            format: 'png',
-            multiplier: 1
-        });
+                // Create static canvas to render the image
+                const tempFabric = new fabric.StaticCanvas(null, {
+                    width: width,
+                    height: height,
+                    backgroundColor: null
+                });
 
-        // Restore background
-        this.canvas.backgroundColor = currentBg;
+                // Clone and render the image
+                const clonedImg = await imageObj.clone();
+                tempFabric.add(clonedImg);
+                tempFabric.renderAll();
 
-        // Load the rendered image
-        const img = new Image();
-        img.onload = () => {
-            // Draw the current canvas state
-            ctx.drawImage(img, 0, 0);
+                // Draw image to native canvas
+                const fabricEl = tempFabric.lowerCanvasEl || tempFabric.getElement();
+                ctx.drawImage(fabricEl, 0, 0);
 
-            // Now draw the eraser path with destination-out
-            ctx.globalCompositeOperation = 'destination-out';
-            
-            // Create a temporary fabric canvas to render just the eraser path
-            const eraserCanvas = document.createElement('canvas');
-            eraserCanvas.width = width;
-            eraserCanvas.height = height;
-            const eraserCtx = eraserCanvas.getContext('2d');
-            
-            // Render the eraser path
-            const tempFabric = new fabric.StaticCanvas(null, {
-                width: width,
-                height: height,
-                backgroundColor: null
-            });
-            
-            // Clone the path with solid fill for erasing
-            eraserPath.clone((clonedPath) => {
-                clonedPath.set({
+                // Apply eraser with destination-out
+                ctx.globalCompositeOperation = 'destination-out';
+
+                // Create temp canvas for eraser path
+                const eraserFabric = new fabric.StaticCanvas(null, {
+                    width: width,
+                    height: height,
+                    backgroundColor: null
+                });
+
+                const clonedEraser = await eraserPath.clone();
+                clonedEraser.set({
                     stroke: 'white',
                     fill: null,
                     strokeWidth: eraserPath.strokeWidth
                 });
-                tempFabric.add(clonedPath);
-                tempFabric.renderAll();
+                eraserFabric.add(clonedEraser);
+                eraserFabric.renderAll();
 
-                // Draw the eraser stroke with destination-out
-                ctx.drawImage(tempFabric.lowerCanvasEl, 0, 0);
+                const eraserEl = eraserFabric.lowerCanvasEl || eraserFabric.getElement();
+                ctx.drawImage(eraserEl, 0, 0);
                 ctx.globalCompositeOperation = 'source-over';
 
-                // Now create a new fabric image from the erased result
+                // Create new image from result
                 const resultDataURL = tempCanvas.toDataURL('image/png');
-                
-                fabric.Image.fromURL(resultDataURL, (newImg) => {
-                    // Clear canvas and add the erased image
-                    const lockedObjects = this.canvas.getObjects().filter(obj => obj.isLocked === true);
-                    
-                    // Clear all non-locked objects
-                    this.canvas.getObjects().slice().forEach(obj => {
-                        if (obj.isLocked !== true) {
-                            this.canvas.remove(obj);
-                        }
-                    });
+                const newImg = await fabric.FabricImage.fromURL(resultDataURL, { crossOrigin: 'anonymous' });
 
-                    // Set transparent background
-                    this.canvas.backgroundColor = null;
+                // Position at origin (transforms already baked in)
+                newImg.set({
+                    left: 0,
+                    top: 0,
+                    originX: 'left',
+                    originY: 'top',
+                    scaleX: 1,
+                    scaleY: 1,
+                    angle: 0,
+                    layerId: imageObj.layerId || 'layer_' + Date.now(),
+                    layerName: imageObj.layerName || 'Image',
+                    selectable: true,
+                    evented: true
+                });
 
-                    // Add the erased image as the base layer
-                    newImg.set({
-                        left: 0,
-                        top: 0,
-                        originX: 'left',
-                        originY: 'top',
-                        layerId: 'erased_' + Date.now(),
-                        layerName: 'Canvas',
-                        selectable: true,
-                        evented: true
-                    });
+                // Get z-index of original image
+                const index = this.canvas.getObjects().indexOf(imageObj);
 
-                    // Insert at bottom (index 0)
-                    this.canvas.insertAt(newImg, 0);
-                    this.canvas.requestRenderAll();
+                // Remove original, add new at same position
+                this.canvas.remove(imageObj);
+                if (index >= 0) {
+                    this.canvas.insertAt(index, newImg);
+                } else {
+                    this.canvas.add(newImg);
+                }
 
-                    // Cleanup
-                    tempFabric.dispose();
+                // Cleanup
+                tempFabric.dispose();
+                eraserFabric.dispose();
 
-                    // Save history
-                    this.historyManager.saveState(this.canvas, 'Erase');
-                }, { crossOrigin: 'anonymous' });
-            });
-        };
-        img.src = dataURL;
+            } catch (e) {
+                console.error('Failed to erase from image:', e);
+            }
+        }
+
+        // Make sure drawing layer stays on top
+        if (this.drawingLayer) {
+            this.canvas.bringObjectToFront(this.drawingLayer);
+        }
+    }
+
+    /**
+     * Ensure the drawing layer group exists
+     * @private
+     */
+    _ensureDrawingLayer() {
+        // Check if drawing layer already exists on canvas
+        const existingLayer = this.canvas.getObjects().find(obj => 
+            obj.layerId === 'drawing-layer' && obj.type === 'group'
+        );
+
+        if (existingLayer) {
+            this.drawingLayer = existingLayer;
+            return;
+        }
+
+        // Create new drawing layer group
+        this.drawingLayer = new fabric.Group([], {
+            left: 0,
+            top: 0,
+            originX: 'left',
+            originY: 'top',
+            selectable: false,
+            evented: false,
+            objectCaching: true,  // CRITICAL: Enables isolation for destination-out
+            subTargetCheck: false,
+            interactive: false,
+            layerId: 'drawing-layer',
+            layerName: 'Drawing'
+        });
+
+        // Add to canvas (on top)
+        this.canvas.add(this.drawingLayer);
+    }
+
+    /**
+     * Get the drawing layer group
+     * @returns {fabric.Group|null}
+     */
+    getDrawingLayer() {
+        return this.drawingLayer;
+    }
+
+    /**
+     * Clear the drawing layer
+     */
+    clearDrawingLayer() {
+        if (this.drawingLayer) {
+            // Remove all objects from the group
+            const objects = this.drawingLayer.getObjects().slice();
+            objects.forEach(obj => this.drawingLayer.remove(obj));
+            this.drawingLayer.dirty = true;
+            this.canvas.requestRenderAll();
+        }
+    }
+
+    /**
+     * Flatten drawing layer to image (optimization for many strokes)
+     */
+    async flattenDrawingLayer() {
+        if (!this.drawingLayer || this.drawingLayer.getObjects().length === 0) {
+            return;
+        }
+
+        // Export the group to data URL
+        const dataURL = this.drawingLayer.toDataURL({
+            format: 'png',
+            multiplier: 1
+        });
+
+        // Create image from the group
+        const img = await fabric.FabricImage.fromURL(dataURL, { crossOrigin: 'anonymous' });
+        
+        img.set({
+            left: this.drawingLayer.left,
+            top: this.drawingLayer.top,
+            originX: 'left',
+            originY: 'top',
+            layerId: 'drawing-flattened',
+            layerName: 'Drawing (Flattened)',
+            selectable: true,
+            evented: true
+        });
+
+        // Get z-index of drawing layer
+        const index = this.canvas.getObjects().indexOf(this.drawingLayer);
+
+        // Remove drawing layer
+        this.canvas.remove(this.drawingLayer);
+        this.drawingLayer = null;
+
+        // Add flattened image at same position
+        if (index >= 0) {
+            this.canvas.insertAt(index, img);
+        } else {
+            this.canvas.add(img);
+        }
+
+        this.canvas.requestRenderAll();
+        this.historyManager.saveState(this.canvas, 'Flatten Drawing');
     }
 
     /**
@@ -237,8 +432,8 @@ class BrushTool {
         
         if (this.isEraser) {
             // Eraser: use semi-transparent pink to show where you're erasing
-            // The actual erasing happens via pixel compositing
-            currentBrush.color = 'rgba(255, 150, 150, 0.5)';
+            // The actual erasing happens via globalCompositeOperation in _handlePathCreated
+            currentBrush.color = 'rgba(255, 100, 100, 0.5)';
             currentBrush.shadow = null;
         } else {
             currentBrush.color = this._hexToRgba(this.brushColor, this.brushOpacity);
@@ -261,7 +456,8 @@ class BrushTool {
         if (result) {
             return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
         }
-        return hex;
+        // Return safe default for invalid hex colors
+        return `rgba(0, 0, 0, ${alpha})`;
     }
 
     /**

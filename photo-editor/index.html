@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self';">
     <title>PhotoLite - Web Photo Editor</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/toolbar.css">
     <link rel="stylesheet" href="css/panels.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
 </head>
 <body>
     <div class="app-container">
@@ -411,6 +412,9 @@
         </div>
     </div>
 
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
+
     <!-- New Canvas Modal -->
     <div class="modal-overlay" id="new-canvas-modal">
         <div class="modal">
@@ -448,8 +452,11 @@
         </div>
     </div>
 
-    <!-- Fabric.js CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <!-- Fabric.js v6 CDN with SRI -->
+    <script src="https://cdn.jsdelivr.net/npm/fabric@6.0.2/dist/index.min.js" 
+            integrity="sha384-LbcdTBqoxWjDjYX2DJStUsfpZXFJm9Anab7pKCkOUy3TvvbzllnctqtCbxp3Othh"
+            crossorigin="anonymous" 
+            referrerpolicy="no-referrer"></script>
     
     <!-- Application Modules -->
     <script src="js/history-manager.js"></script>

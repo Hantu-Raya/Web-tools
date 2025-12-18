@@ -23,6 +23,7 @@ class CanvasManager {
         
         // Pan settings
         this.isPanning = false;
+        this.isPanMode = false; // Explicit pan mode (Hand tool)
         this.lastPanPosition = { x: 0, y: 0 };
         
         // Initialize Fabric canvas
@@ -68,9 +69,9 @@ class CanvasManager {
             }
         }, { passive: false });
 
-        // Pan with middle mouse button or space + drag
+        // Pan with middle mouse button or space + drag OR if in Pan Mode
         this.canvas.on('mouse:down', (opt) => {
-            if (opt.e.button === 1 || (opt.e.altKey && opt.e.button === 0)) {
+            if (this.isPanMode || opt.e.button === 1 || (opt.e.altKey && opt.e.button === 0)) {
                 this.isPanning = true;
                 this.lastPanPosition = { x: opt.e.clientX, y: opt.e.clientY };
                 this.canvas.defaultCursor = 'grabbing';
@@ -97,14 +98,45 @@ class CanvasManager {
 
         this.canvas.on('mouse:up', () => {
             this.isPanning = false;
-            this.canvas.defaultCursor = 'default';
-            this.canvas.selection = true;
+            if (this.isPanMode) {
+                this.canvas.defaultCursor = 'grab';
+                this.canvas.selection = false;
+            } else {
+                this.canvas.defaultCursor = 'default';
+                this.canvas.selection = true;
+            }
         });
 
         // Prevent context menu on right click
         this.canvasElement.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
+    }
+
+    /**
+     * Enable/disable pan mode (Hand tool)
+     * @param {boolean} enabled 
+     */
+    setPanMode(enabled) {
+        this.isPanMode = enabled;
+        this.canvas.selection = !enabled;
+        this.canvas.defaultCursor = enabled ? 'grab' : 'default';
+        
+        this.canvas.forEachObject(obj => {
+            if (enabled) {
+                // Disable selection for all objects in pan mode
+                obj.selectable = false;
+                obj.evented = false;
+            } else {
+                // Restore selection based on lock state
+                // If object is locked, it should remain unselectable
+                const isLocked = obj.isLocked === true;
+                obj.selectable = !isLocked;
+                obj.evented = !isLocked;
+            }
+        });
+        
+        this.canvas.requestRenderAll();
     }
 
     /**
@@ -238,38 +270,40 @@ class CanvasManager {
     /**
      * Load image onto canvas
      * @param {string} src - Image source (URL or base64)
-     * @returns {Promise<fabric.Image>}
+     * @returns {Promise<fabric.FabricImage>}
      */
-    loadImage(src) {
-        return new Promise((resolve, reject) => {
-            fabric.Image.fromURL(src, (img) => {
-                if (!img) {
-                    reject(new Error('Failed to load image'));
-                    return;
-                }
+    async loadImage(src) {
+        try {
+            // Fabric.js v6: FabricImage.fromURL returns a Promise
+            const img = await fabric.FabricImage.fromURL(src, { crossOrigin: 'anonymous' });
+            
+            if (!img) {
+                throw new Error('Failed to load image');
+            }
 
-                // Resize canvas to fit image
-                this.resize(img.width, img.height);
-                
-                // Center image on canvas
-                img.set({
-                    left: 0,
-                    top: 0,
-                    selectable: true,
-                    evented: true,
-                    id: 'image_' + Date.now(),
-                    layerId: 'layer_' + Date.now()
-                });
+            // Resize canvas to fit image
+            this.resize(img.width, img.height);
+            
+            // Center image on canvas
+            img.set({
+                left: 0,
+                top: 0,
+                selectable: true,
+                evented: true,
+                id: 'image_' + Date.now(),
+                layerId: 'layer_' + Date.now()
+            });
 
-                this.canvas.clear();
-                this.canvas.setBackgroundColor('#ffffff', () => {
-                    this.canvas.add(img);
-                    this.canvas.renderAll();
-                    this.fitToScreen();
-                    resolve(img);
-                });
-            }, { crossOrigin: 'anonymous' });
-        });
+            this.canvas.clear();
+            this.canvas.backgroundColor = '#ffffff';
+            this.canvas.add(img);
+            this.canvas.renderAll();
+            this.fitToScreen();
+            
+            return img;
+        } catch (error) {
+            throw new Error('Failed to load image');
+        }
     }
 
     /**
@@ -281,10 +315,9 @@ class CanvasManager {
     createNew(width, height, backgroundColor = '#ffffff') {
         this.resize(width, height);
         this.canvas.clear();
-        this.canvas.setBackgroundColor(backgroundColor, () => {
-            this.canvas.renderAll();
-            this.fitToScreen();
-        });
+        this.canvas.backgroundColor = backgroundColor;
+        this.canvas.renderAll();
+        this.fitToScreen();
     }
 
     /**

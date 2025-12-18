@@ -25,6 +25,10 @@ class LayerManager {
     _initEventListeners() {
         // Listen for canvas object changes
         this.canvas.on('object:added', (e) => {
+            // Ignore crop UI elements
+            if (e.target.isCropUI || e.target.excludeFromExport) {
+                return;
+            }
             if (!e.target.layerId) {
                 e.target.layerId = this._generateLayerId();
                 e.target.layerName = this._generateLayerName(e.target);
@@ -32,18 +36,22 @@ class LayerManager {
             this._syncLayersFromCanvas();
         });
 
-        this.canvas.on('object:removed', () => {
+        this.canvas.on('object:removed', (e) => {
+            // Ignore crop UI elements
+            if (e.target?.isCropUI || e.target?.excludeFromExport) {
+                return;
+            }
             this._syncLayersFromCanvas();
         });
 
         this.canvas.on('selection:created', (e) => {
-            if (e.selected && e.selected[0]) {
+            if (e.selected && e.selected[0] && !e.selected[0].isCropUI) {
                 this.setActiveLayer(e.selected[0].layerId);
             }
         });
 
         this.canvas.on('selection:updated', (e) => {
-            if (e.selected && e.selected[0]) {
+            if (e.selected && e.selected[0] && !e.selected[0].isCropUI) {
                 this.setActiveLayer(e.selected[0].layerId);
             }
         });
@@ -98,15 +106,18 @@ class LayerManager {
      */
     _syncLayersFromCanvas() {
         const objects = this.canvas.getObjects();
-        this.layers = objects.map((obj, index) => ({
-            id: obj.layerId,
-            name: obj.layerName || `Layer ${index + 1}`,
-            type: obj.type,
-            visible: obj.visible !== false,
-            opacity: obj.opacity || 1,
-            locked: obj.isLocked === true,
-            object: obj
-        })).reverse(); // Reverse for visual top-to-bottom order
+        // Filter out crop UI elements and other non-layer objects
+        this.layers = objects
+            .filter(obj => !obj.isCropUI && !obj.excludeFromExport)
+            .map((obj, index) => ({
+                id: obj.layerId,
+                name: obj.layerName || `Layer ${index + 1}`,
+                type: obj.type,
+                visible: obj.visible !== false,
+                opacity: obj.opacity || 1,
+                locked: obj.isLocked === true,
+                object: obj
+            })).reverse(); // Reverse for visual top-to-bottom order
 
         this._renderLayersList();
     }
@@ -134,17 +145,17 @@ class LayerManager {
 
         this.layersList.innerHTML = this.layers.map(layer => `
             <div class="layer-item ${layer.id === this.activeLayerId ? 'active' : ''} ${layer.locked ? 'locked' : ''}" 
-                 data-layer-id="${layer.id}"
+                 data-layer-id="${this._escapeAttribute(layer.id)}"
                  draggable="true">
                 <div class="layer-thumbnail">
                     <canvas width="40" height="40"></canvas>
                 </div>
                 <div class="layer-info">
                     <span class="layer-name">${this._escapeHtml(layer.name)}</span>
-                    <span class="layer-type">${layer.type}</span>
+                    <span class="layer-type">${this._escapeHtml(layer.type || 'object')}</span>
                 </div>
                 <button class="layer-lock ${layer.locked ? 'is-locked' : ''}" 
-                        data-layer-id="${layer.id}"
+                        data-layer-id="${this._escapeAttribute(layer.id)}"
                         title="${layer.locked ? 'Unlock Layer' : 'Lock Layer'}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         ${layer.locked ? 
@@ -154,7 +165,7 @@ class LayerManager {
                     </svg>
                 </button>
                 <button class="layer-visibility ${!layer.visible ? 'hidden' : ''}" 
-                        data-layer-id="${layer.id}">
+                        data-layer-id="${this._escapeAttribute(layer.id)}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         ${layer.visible ? 
                             '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>' :
@@ -183,11 +194,24 @@ class LayerManager {
     }
 
     /**
+     * Escape attribute values to prevent XSS
+     * @private
+     */
+    _escapeAttribute(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#x27;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    /**
      * Generate layer thumbnails
      * @private
      */
     _generateThumbnails() {
-        this.layers.forEach(layer => {
+        this.layers.forEach(async (layer) => {
             const layerEl = this.layersList.querySelector(`[data-layer-id="${layer.id}"]`);
             if (!layerEl) return;
 
@@ -197,8 +221,9 @@ class LayerManager {
             const ctx = thumbCanvas.getContext('2d');
             ctx.clearRect(0, 0, 40, 40);
 
-            // Clone and render object to thumbnail
-            layer.object.clone((cloned) => {
+            // Fabric.js v6: clone() returns a Promise
+            try {
+                const cloned = await layer.object.clone();
                 const bounds = cloned.getBoundingRect();
                 const scale = Math.min(36 / bounds.width, 36 / bounds.height, 1);
                 
@@ -219,7 +244,10 @@ class LayerManager {
                 tempCanvas.renderAll();
 
                 ctx.drawImage(tempCanvas.getElement(), 0, 0);
-            });
+                tempCanvas.dispose();
+            } catch (e) {
+                console.warn('Failed to generate thumbnail:', e);
+            }
         });
     }
 
@@ -482,10 +510,12 @@ class LayerManager {
     /**
      * Duplicate layer
      */
-    duplicateLayer(layerId) {
+    async duplicateLayer(layerId) {
         const layer = this.layers.find(l => l.id === layerId);
         if (layer && layer.object) {
-            layer.object.clone((cloned) => {
+            // Fabric.js v6: clone() returns a Promise
+            try {
+                const cloned = await layer.object.clone();
                 cloned.set({
                     left: cloned.left + 20,
                     top: cloned.top + 20,
@@ -495,7 +525,9 @@ class LayerManager {
                 this.canvas.add(cloned);
                 this.canvas.setActiveObject(cloned);
                 this.canvas.requestRenderAll();
-            });
+            } catch (e) {
+                console.error('Failed to duplicate layer:', e);
+            }
         }
     }
 
@@ -524,22 +556,28 @@ class LayerManager {
     /**
      * Flatten all layers to background
      */
-    flattenImage() {
+    async flattenImage() {
         const dataURL = this.canvasManager.exportAsDataURL({ format: 'png' });
         
-        fabric.Image.fromURL(dataURL, (img) => {
+        try {
+            // Fabric.js v6: FabricImage.fromURL returns a Promise
+            const img = await fabric.FabricImage.fromURL(dataURL, { crossOrigin: 'anonymous' });
+            
             this.canvas.clear();
-            this.canvas.setBackgroundColor('#ffffff', () => {
-                img.set({
-                    left: 0,
-                    top: 0,
-                    layerId: this._generateLayerId(),
-                    layerName: 'Flattened Image'
-                });
-                this.canvas.add(img);
-                this.canvas.requestRenderAll();
+            this.canvas.backgroundColor = '#ffffff';
+            
+            img.set({
+                left: 0,
+                top: 0,
+                layerId: this._generateLayerId(),
+                layerName: 'Flattened Image'
             });
-        });
+            
+            this.canvas.add(img);
+            this.canvas.requestRenderAll();
+        } catch (e) {
+            console.error('Failed to flatten image:', e);
+        }
     }
 }
 

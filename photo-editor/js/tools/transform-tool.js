@@ -22,12 +22,17 @@ class TransformTool {
         this.canvas.isDrawingMode = false;
         this.canvas.selection = true;
         
-        // Enable transform controls on all objects
+        // Enable transform controls on all objects (unless locked)
         this.canvas.getObjects().forEach(obj => {
+            const isLocked = obj.isLocked === true;
             obj.set({
-                hasControls: true,
+                hasControls: !isLocked,
                 hasBorders: true,
-                lockRotation: false
+                lockRotation: isLocked,
+                lockScalingX: isLocked,
+                lockScalingY: isLocked,
+                selectable: !isLocked,
+                evented: !isLocked
             });
         });
         
@@ -39,6 +44,19 @@ class TransformTool {
      */
     deactivate() {
         this.isActive = false;
+        
+        // Disable transform controls (switch to selection only)
+        this.canvas.getObjects().forEach(obj => {
+            obj.set({
+                hasControls: false, // Hide resize handles
+                hasBorders: true,   // Keep selection border
+                lockRotation: true,
+                lockScalingX: true,
+                lockScalingY: true
+            });
+        });
+        
+        this.canvas.requestRenderAll();
     }
 
     /**
@@ -398,7 +416,7 @@ class TransformTool {
     bringToFront() {
         const activeObject = this.canvas.getActiveObject();
         if (activeObject) {
-            this.canvas.bringToFront(activeObject);
+            this.canvas.bringObjectToFront(activeObject);
             this.canvas.requestRenderAll();
             this.historyManager.saveState(this.canvas, 'Bring to Front');
         }
@@ -410,7 +428,7 @@ class TransformTool {
     sendToBack() {
         const activeObject = this.canvas.getActiveObject();
         if (activeObject) {
-            this.canvas.sendToBack(activeObject);
+            this.canvas.sendObjectToBack(activeObject);
             this.canvas.requestRenderAll();
             this.historyManager.saveState(this.canvas, 'Send to Back');
         }
@@ -422,7 +440,7 @@ class TransformTool {
     bringForward() {
         const activeObject = this.canvas.getActiveObject();
         if (activeObject) {
-            this.canvas.bringForward(activeObject);
+            this.canvas.bringObjectForward(activeObject);
             this.canvas.requestRenderAll();
             this.historyManager.saveState(this.canvas, 'Bring Forward');
         }
@@ -434,7 +452,7 @@ class TransformTool {
     sendBackward() {
         const activeObject = this.canvas.getActiveObject();
         if (activeObject) {
-            this.canvas.sendBackwards(activeObject);
+            this.canvas.sendObjectBackwards(activeObject);
             this.canvas.requestRenderAll();
             this.historyManager.saveState(this.canvas, 'Send Backward');
         }

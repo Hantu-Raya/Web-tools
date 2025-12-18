@@ -13,8 +13,9 @@ class CropTool {
         
         this.isActive = false;
         this.cropRect = null;
-        this.overlay = null;
+        this.overlayRects = []; // Store overlay references
         this.aspectRatio = null; // null for free crop
+        this.onComplete = null; // Callback when crop completes
         
         // Predefined aspect ratios
         this.aspectRatios = {
@@ -27,6 +28,43 @@ class CropTool {
             '2:3': 2/3,
             '3:2': 3/2
         };
+        
+        // Bound event handlers for proper cleanup
+        this._onObjectMoving = this._onObjectMoving.bind(this);
+        this._onObjectScaling = this._onObjectScaling.bind(this);
+        this._onObjectModified = this._onObjectModified.bind(this);
+    }
+    
+    /**
+     * Event handler for object moving
+     * @private
+     */
+    _onObjectMoving(e) {
+        if (e.target && e.target.id === 'crop-rect') {
+            this._constrainCropRect();
+            this._updateOverlay();
+        }
+    }
+    
+    /**
+     * Event handler for object scaling
+     * @private
+     */
+    _onObjectScaling(e) {
+        if (e.target && e.target.id === 'crop-rect') {
+            this._handleCropScaling(e);
+            this._updateOverlay();
+        }
+    }
+    
+    /**
+     * Event handler for object modified
+     * @private
+     */
+    _onObjectModified(e) {
+        if (e.target && e.target.id === 'crop-rect') {
+            this._updateOverlay();
+        }
     }
 
     /**
@@ -50,6 +88,9 @@ class CropTool {
         this.canvas.selection = true;
         this.canvas.defaultCursor = 'default';
         
+        // Remove event listeners
+        this._unbindCropEvents();
+        
         this._removeCropUI();
     }
 
@@ -62,34 +103,51 @@ class CropTool {
         const width = this.canvasManager.width - padding * 2;
         const height = this.canvasManager.height - padding * 2;
 
-        // Create crop rectangle
+        // Create crop rectangle with special properties to exclude from layers
         this.cropRect = new fabric.Rect({
             left: padding,
             top: padding,
             width: width,
             height: height,
-            fill: 'transparent',
+            fill: 'rgba(255, 255, 255, 0.01)', // Near-transparent fill for better hit detection
             stroke: '#6366f1',
-            strokeWidth: 2,
-            strokeDashArray: [5, 5],
+            strokeWidth: 3,
+            strokeUniform: true, // Keep stroke width consistent at any scale
+            strokeDashArray: [8, 4],
+            // Control styling - Fabric.js v6 compatible
             cornerColor: '#6366f1',
             cornerStrokeColor: '#ffffff',
-            cornerSize: 12,
+            cornerSize: 14,
             cornerStyle: 'circle',
             transparentCorners: false,
-            hasRotatingPoint: false,
+            borderColor: '#6366f1',
+            borderScaleFactor: 2,
+            // Control visibility
+            hasControls: true,
+            hasBorders: true,
             lockRotation: true,
             selectable: true,
             evented: true,
-            id: 'crop-rect'
+            // Custom properties
+            id: 'crop-rect',
+            excludeFromExport: true,
+            isCropUI: true
+        });
+        
+        // Disable rotation control in v6
+        this.cropRect.setControlsVisibility({
+            mtr: false // Hide rotation control
         });
 
-        // Create dark overlay outside crop area
-        this._createOverlay();
-
+        // First add crop rect to canvas
         this.canvas.add(this.cropRect);
+        
+        // Then create overlays (so they can reference the crop rect position)
+        this._updateOverlay();
+        
+        // Bring crop rect to front and select it
+        this.canvas.bringObjectToFront(this.cropRect);
         this.canvas.setActiveObject(this.cropRect);
-        this.canvas.bringToFront(this.cropRect);
         this.canvas.requestRenderAll();
 
         // Bind resize events
@@ -101,7 +159,6 @@ class CropTool {
      * @private
      */
     _createOverlay() {
-        // We'll use the clipPath approach or just visual darkening
         this._updateOverlay();
     }
 
@@ -111,81 +168,96 @@ class CropTool {
      */
     _updateOverlay() {
         // Remove existing overlays
-        this.canvas.getObjects().forEach(obj => {
-            if (obj.id && obj.id.startsWith('crop-overlay')) {
-                this.canvas.remove(obj);
-            }
+        this.overlayRects.forEach(overlay => {
+            this.canvas.remove(overlay);
         });
+        this.overlayRects = [];
 
         if (!this.cropRect) return;
 
         const rect = this.cropRect;
         const canvasWidth = this.canvasManager.width;
         const canvasHeight = this.canvasManager.height;
+        
+        // Calculate crop rect bounds - use Math.round to avoid sub-pixel gaps
+        const cropLeft = Math.round(rect.left);
+        const cropTop = Math.round(rect.top);
+        const cropRight = Math.round(rect.left + rect.width * rect.scaleX);
+        const cropBottom = Math.round(rect.top + rect.height * rect.scaleY);
+        
+        // Small overlap to prevent sub-pixel gaps between overlays
+        const overlap = 1;
 
         const overlayProps = {
             fill: 'rgba(0, 0, 0, 0.6)',
             selectable: false,
             evented: false,
-            excludeFromExport: true
+            excludeFromExport: true,
+            isCropUI: true,
+            stroke: null,
+            strokeWidth: 0
         };
 
-        // Top overlay
-        if (rect.top > 0) {
+        // Top overlay - full width, from top to crop top (with overlap into crop area)
+        if (cropTop > 0) {
             const top = new fabric.Rect({
                 ...overlayProps,
-                left: 0,
-                top: 0,
-                width: canvasWidth,
-                height: rect.top,
+                left: -overlap,
+                top: -overlap,
+                width: canvasWidth + overlap * 2,
+                height: cropTop + overlap,
                 id: 'crop-overlay-top'
             });
             this.canvas.add(top);
+            this.overlayRects.push(top);
         }
 
-        // Bottom overlay
-        const bottomY = rect.top + rect.height * rect.scaleY;
-        if (bottomY < canvasHeight) {
+        // Bottom overlay - full width, from crop bottom to canvas bottom
+        if (cropBottom < canvasHeight) {
             const bottom = new fabric.Rect({
                 ...overlayProps,
-                left: 0,
-                top: bottomY,
-                width: canvasWidth,
-                height: canvasHeight - bottomY,
+                left: -overlap,
+                top: cropBottom,
+                width: canvasWidth + overlap * 2,
+                height: canvasHeight - cropBottom + overlap * 2,
                 id: 'crop-overlay-bottom'
             });
             this.canvas.add(bottom);
+            this.overlayRects.push(bottom);
         }
 
-        // Left overlay
-        if (rect.left > 0) {
+        // Left overlay - from crop top to crop bottom, left edge to crop left
+        if (cropLeft > 0) {
             const left = new fabric.Rect({
                 ...overlayProps,
-                left: 0,
-                top: rect.top,
-                width: rect.left,
-                height: rect.height * rect.scaleY,
+                left: -overlap,
+                top: cropTop,
+                width: cropLeft + overlap,
+                height: cropBottom - cropTop,
                 id: 'crop-overlay-left'
             });
             this.canvas.add(left);
+            this.overlayRects.push(left);
         }
 
-        // Right overlay
-        const rightX = rect.left + rect.width * rect.scaleX;
-        if (rightX < canvasWidth) {
+        // Right overlay - from crop top to crop bottom, crop right to canvas right
+        if (cropRight < canvasWidth) {
             const right = new fabric.Rect({
                 ...overlayProps,
-                left: rightX,
-                top: rect.top,
-                width: canvasWidth - rightX,
-                height: rect.height * rect.scaleY,
+                left: cropRight,
+                top: cropTop,
+                width: canvasWidth - cropRight + overlap * 2,
+                height: cropBottom - cropTop,
                 id: 'crop-overlay-right'
             });
             this.canvas.add(right);
+            this.overlayRects.push(right);
         }
 
-        // Bring crop rect to front
-        this.canvas.bringToFront(this.cropRect);
+        // Bring crop rect to front (v6 method)
+        if (this.cropRect) {
+            this.canvas.bringObjectToFront(this.cropRect);
+        }
         this.canvas.requestRenderAll();
     }
 
@@ -194,25 +266,19 @@ class CropTool {
      * @private
      */
     _bindCropEvents() {
-        this.canvas.on('object:moving', (e) => {
-            if (e.target && e.target.id === 'crop-rect') {
-                this._constrainCropRect();
-                this._updateOverlay();
-            }
-        });
-
-        this.canvas.on('object:scaling', (e) => {
-            if (e.target && e.target.id === 'crop-rect') {
-                this._handleCropScaling(e);
-                this._updateOverlay();
-            }
-        });
-
-        this.canvas.on('object:modified', (e) => {
-            if (e.target && e.target.id === 'crop-rect') {
-                this._updateOverlay();
-            }
-        });
+        this.canvas.on('object:moving', this._onObjectMoving);
+        this.canvas.on('object:scaling', this._onObjectScaling);
+        this.canvas.on('object:modified', this._onObjectModified);
+    }
+    
+    /**
+     * Unbind crop area events
+     * @private
+     */
+    _unbindCropEvents() {
+        this.canvas.off('object:moving', this._onObjectMoving);
+        this.canvas.off('object:scaling', this._onObjectScaling);
+        this.canvas.off('object:modified', this._onObjectModified);
     }
 
     /**
@@ -273,21 +339,25 @@ class CropTool {
      * @private
      */
     _removeCropUI() {
-        // Remove crop rect and overlays
-        this.canvas.getObjects().forEach(obj => {
-            if (obj.id && (obj.id === 'crop-rect' || obj.id.startsWith('crop-overlay'))) {
-                this.canvas.remove(obj);
-            }
+        // Remove overlay rects
+        this.overlayRects.forEach(overlay => {
+            this.canvas.remove(overlay);
         });
+        this.overlayRects = [];
 
-        this.cropRect = null;
+        // Remove crop rect
+        if (this.cropRect) {
+            this.canvas.remove(this.cropRect);
+            this.cropRect = null;
+        }
+        
         this.canvas.requestRenderAll();
     }
 
     /**
      * Apply the crop
      */
-    applyCrop() {
+    async applyCrop() {
         if (!this.cropRect) return;
 
         // CRITICAL: Save state BEFORE cropping so we can undo to it
@@ -319,8 +389,10 @@ class CropTool {
             format: 'png'
         });
 
-        // Load cropped image
-        fabric.Image.fromURL(croppedDataURL, (img) => {
+        try {
+            // Fabric.js v6: FabricImage.fromURL returns a Promise
+            const img = await fabric.FabricImage.fromURL(croppedDataURL, { crossOrigin: 'anonymous' });
+            
             // Clear canvas and resize
             this.canvas.clear();
             this.canvasManager.resize(Math.round(cropWidth), Math.round(cropHeight));
@@ -333,17 +405,23 @@ class CropTool {
                 layerName: 'Cropped Image'
             });
 
-            this.canvas.setBackgroundColor('#ffffff', () => {
-                this.canvas.add(img);
-                this.canvas.requestRenderAll();
-                this.canvasManager.fitToScreen();
-                
-                // Save the post-crop state
-                this.historyManager.saveState(this.canvas, 'Crop');
-            });
-        });
+            this.canvas.backgroundColor = '#ffffff';
+            this.canvas.add(img);
+            this.canvas.requestRenderAll();
+            this.canvasManager.fitToScreen();
+            
+            // Save the post-crop state
+            this.historyManager.saveState(this.canvas, 'Crop');
+        } catch (e) {
+            console.error('Failed to apply crop:', e);
+        }
 
         this.deactivate();
+        
+        // Call completion callback to reset toolbar
+        if (typeof this.onComplete === 'function') {
+            this.onComplete();
+        }
     }
 
     /**
@@ -352,6 +430,11 @@ class CropTool {
     cancelCrop() {
         this._removeCropUI();
         this.deactivate();
+        
+        // Call completion callback to reset toolbar
+        if (typeof this.onComplete === 'function') {
+            this.onComplete();
+        }
     }
 
     /**
