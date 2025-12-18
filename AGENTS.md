@@ -16,7 +16,7 @@
 
 ## CSS Style
 - BEM naming: `.block__element--modifier`
-- CSS custom properties for theming; mobile-first `@media (max-width: ...)`
+- CSS custom properties for theming; dark theme default
 
 ## HTML Style
 - Semantic HTML5; IDs for JS hooks, classes for styling
