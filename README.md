@@ -6,11 +6,14 @@ A collection of browser-based image editing tools. No server required - just ope
 
 ## 📋 Requirements
 
-- **Browser:** Any modern browser (Chrome, Firefox, Edge, Safari)
-- **No installation needed** - just open the HTML file
-- **No internet required** after first load (libraries are cached via CDN)
-- **No server/backend** - everything runs 100% client-side in your browser
-- **No account/login** - start using immediately
+**Just a web browser.** That's it.
+
+- ✅ Chrome, Firefox, Edge, or Safari
+- ✅ No installation
+- ✅ No Node.js, npm, or build tools
+- ✅ No server or backend
+- ✅ No account or login
+- ✅ Works offline after first load (Fabric.js cached from CDN)
 
 ---
 
