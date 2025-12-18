@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhotoLite - Web Photo Editor</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/toolbar.css">
+    <link rel="stylesheet" href="css/panels.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header Bar -->
+        <header class="header-bar">
+            <div class="header-left">
+                <div class="logo">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="12" r="4"/>
+                        <line x1="21.17" y1="8" x2="12" y2="8"/>
+                        <line x1="3.95" y1="6.06" x2="8.54" y2="14"/>
+                        <line x1="10.88" y1="21.94" x2="15.46" y2="14"/>
+                    </svg>
+                    <span>PhotoLite</span>
+                </div>
+                <div class="file-menu">
+                    <button class="menu-btn" id="btn-new">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="12" y1="18" x2="12" y2="12"/>
+                            <line x1="9" y1="15" x2="15" y2="15"/>
+                        </svg>
+                        New
+                    </button>
+                    <button class="menu-btn" id="btn-open">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        Open
+                    </button>
+                    <button class="menu-btn" id="btn-save">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                            <polyline points="17 21 17 13 7 13 7 21"/>
+                            <polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                        Save
+                    </button>
+                    <input type="file" id="file-input" accept="image/*" hidden>
+                </div>
+            </div>
+            <div class="header-center">
+                <div class="history-controls">
+                    <button class="icon-btn" id="btn-undo" title="Undo (Ctrl+Z)" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="1 4 1 10 7 10"/>
+                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                        </svg>
+                    </button>
+                    <button class="icon-btn" id="btn-redo" title="Redo (Ctrl+Y)" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="zoom-controls">
+                    <button class="icon-btn" id="btn-zoom-out" title="Zoom Out">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            <line x1="8" y1="11" x2="14" y2="11"/>
+                        </svg>
+                    </button>
+                    <span class="zoom-level" id="zoom-level">100%</span>
+                    <button class="icon-btn" id="btn-zoom-in" title="Zoom In">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            <line x1="11" y1="8" x2="11" y2="14"/>
+                            <line x1="8" y1="11" x2="14" y2="11"/>
+                        </svg>
+                    </button>
+                    <button class="icon-btn" id="btn-zoom-fit" title="Fit to Screen">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                        </svg>
+                    </button>
+                </div>
+                <button class="btn-export" id="btn-export">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Export
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Left Toolbar -->
+            <aside class="toolbar" id="toolbar">
+                <div class="tool-group">
+                    <button class="tool-btn active" data-tool="select" title="Select (V)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+                            <path d="M13 13l6 6"/>
+                        </svg>
+                    </button>
+                    <button class="tool-btn" data-tool="move" title="Move (M)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="5 9 2 12 5 15"/>
+                            <polyline points="9 5 12 2 15 5"/>
+                            <polyline points="15 19 12 22 9 19"/>
+                            <polyline points="19 9 22 12 19 15"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <line x1="12" y1="2" x2="12" y2="22"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="tool-group">
+                    <button class="tool-btn" data-tool="crop" title="Crop (C)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6.13 1L6 16a2 2 0 0 0 2 2h15"/>
+                            <path d="M1 6.13L16 6a2 2 0 0 1 2 2v15"/>
+                        </svg>
+                    </button>
+                    <button class="tool-btn" data-tool="transform" title="Transform (T)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <polyline points="1 20 1 14 7 14"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="tool-group">
+                    <button class="tool-btn" data-tool="brush" title="Brush (B)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                            <path d="M2 2l7.586 7.586"/>
+                            <circle cx="11" cy="11" r="2"/>
+                        </svg>
+                    </button>
+                    <button class="tool-btn" data-tool="eraser" title="Eraser (E)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 20H7L3 16a1 1 0 0 1 0-1.41l9.59-9.59a2 2 0 0 1 2.82 0l5.17 5.17a2 2 0 0 1 0 2.83L12 22"/>
+                        </svg>
+                    </button>
+                    <button class="tool-btn" data-tool="eyedropper" title="Color Picker (I)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M2 22l1-1h3l9-9"/>
+                            <path d="M3 21v-3l9-9"/>
+                            <path d="M14.5 5.5l4 4"/>
+                            <path d="M12 8l4-4 4 4-4 4"/>
+                            <path d="M16 4l4-2-2 4"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="tool-group">
+                    <button class="tool-btn" data-tool="rectangle" title="Rectangle (U)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        </svg>
+                    </button>
+                    <button class="tool-btn" data-tool="ellipse" title="Ellipse (O)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                        </svg>
+                    </button>
+                    <button class="tool-btn" data-tool="line" title="Line (L)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="5" y1="19" x2="19" y2="5"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="tool-group">
+                    <button class="tool-btn" data-tool="text" title="Text (T)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="4 7 4 4 20 4 20 7"/>
+                            <line x1="9" y1="20" x2="15" y2="20"/>
+                            <line x1="12" y1="4" x2="12" y2="20"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="tool-separator"></div>
+
+                <!-- Color Pickers -->
+                <div class="color-pickers">
+                    <div class="color-picker-wrapper">
+                        <label>Fill</label>
+                        <input type="color" id="fill-color" value="#6366f1" class="color-input">
+                    </div>
+                    <div class="color-picker-wrapper">
+                        <label>Stroke</label>
+                        <input type="color" id="stroke-color" value="#ffffff" class="color-input">
+                    </div>
+                </div>
+
+                <!-- Brush Size -->
+                <div class="tool-options" id="brush-options">
+                    <label>Size</label>
+                    <input type="range" id="brush-size" min="1" max="100" value="10">
+                    <span id="brush-size-value">10</span>
+                </div>
+            </aside>
+
+            <!-- Canvas Area -->
+            <section class="canvas-area" id="canvas-area">
+                <div class="canvas-wrapper" id="canvas-wrapper">
+                    <canvas id="main-canvas"></canvas>
+                </div>
+                <!-- Drop Zone Overlay -->
+                <div class="drop-zone" id="drop-zone">
+                    <div class="drop-zone-content">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <h3>Drop image here</h3>
+                        <p>or click to browse</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panels -->
+            <aside class="panels-container">
+                <!-- Layers Panel -->
+                <div class="panel" id="layers-panel">
+                    <div class="panel-header">
+                        <h3>Layers</h3>
+                        <div class="panel-actions">
+                            <button class="panel-btn" id="btn-add-layer" title="Add Layer">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"/>
+                                    <line x1="5" y1="12" x2="19" y2="12"/>
+                                </svg>
+                            </button>
+                            <button class="panel-btn" id="btn-delete-layer" title="Delete Layer">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="panel-content">
+                        <div class="layers-list" id="layers-list">
+                            <!-- Layers will be dynamically added here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Adjustments Panel -->
+                <div class="panel" id="adjustments-panel">
+                    <div class="panel-header">
+                        <h3>Adjustments</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="adjustment-group">
+                            <label>Brightness</label>
+                            <input type="range" class="adjustment-slider" id="adj-brightness" min="-100" max="100" value="0">
+                            <span class="adjustment-value">0</span>
+                        </div>
+                        <div class="adjustment-group">
+                            <label>Contrast</label>
+                            <input type="range" class="adjustment-slider" id="adj-contrast" min="-100" max="100" value="0">
+                            <span class="adjustment-value">0</span>
+                        </div>
+                        <div class="adjustment-group">
+                            <label>Saturation</label>
+                            <input type="range" class="adjustment-slider" id="adj-saturation" min="-100" max="100" value="0">
+                            <span class="adjustment-value">0</span>
+                        </div>
+                        <div class="adjustment-group">
+                            <label>Hue</label>
+                            <input type="range" class="adjustment-slider" id="adj-hue" min="-180" max="180" value="0">
+                            <span class="adjustment-value">0</span>
+                        </div>
+                        <div class="adjustment-group">
+                            <label>Exposure</label>
+                            <input type="range" class="adjustment-slider" id="adj-exposure" min="-100" max="100" value="0">
+                            <span class="adjustment-value">0</span>
+                        </div>
+                        <button class="btn-reset" id="btn-reset-adjustments">Reset All</button>
+                    </div>
+                </div>
+
+                <!-- Filters Panel -->
+                <div class="panel" id="filters-panel">
+                    <div class="panel-header">
+                        <h3>Filters</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="filters-grid">
+                            <button class="filter-btn" data-filter="none">
+                                <span class="filter-preview original"></span>
+                                <span>Original</span>
+                            </button>
+                            <button class="filter-btn" data-filter="grayscale">
+                                <span class="filter-preview grayscale"></span>
+                                <span>Grayscale</span>
+                            </button>
+                            <button class="filter-btn" data-filter="sepia">
+                                <span class="filter-preview sepia"></span>
+                                <span>Sepia</span>
+                            </button>
+                            <button class="filter-btn" data-filter="invert">
+                                <span class="filter-preview invert"></span>
+                                <span>Invert</span>
+                            </button>
+                            <button class="filter-btn" data-filter="blur">
+                                <span class="filter-preview blur"></span>
+                                <span>Blur</span>
+                            </button>
+                            <button class="filter-btn" data-filter="sharpen">
+                                <span class="filter-preview sharpen"></span>
+                                <span>Sharpen</span>
+                            </button>
+                            <button class="filter-btn" data-filter="emboss">
+                                <span class="filter-preview emboss"></span>
+                                <span>Emboss</span>
+                            </button>
+                            <button class="filter-btn" data-filter="vignette">
+                                <span class="filter-preview vignette"></span>
+                                <span>Vignette</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Status Bar -->
+        <footer class="status-bar">
+            <div class="status-left">
+                <span id="image-dimensions">No image loaded</span>
+            </div>
+            <div class="status-center">
+                <span id="cursor-position">X: 0, Y: 0</span>
+            </div>
+            <div class="status-right">
+                <span id="active-tool">Select Tool</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal-overlay" id="export-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Export Image</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-content">
+                <div class="export-option">
+                    <label>Format</label>
+                    <select id="export-format">
+                        <option value="png">PNG</option>
+                        <option value="jpeg">JPEG</option>
+                        <option value="webp">WebP</option>
+                    </select>
+                </div>
+                <div class="export-option" id="quality-option">
+                    <label>Quality</label>
+                    <input type="range" id="export-quality" min="10" max="100" value="90">
+                    <span id="quality-value">90%</span>
+                </div>
+                <div class="export-option">
+                    <label>Filename</label>
+                    <input type="text" id="export-filename" value="photolite-export" placeholder="Enter filename">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="btn-cancel-export">Cancel</button>
+                <button class="btn-primary" id="btn-confirm-export">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Eyedropper Color Preview -->
+    <div id="eyedropper-preview" class="eyedropper-preview">
+        <div class="eyedropper-color"></div>
+        <span class="eyedropper-hex">#000000</span>
+    </div>
+
+    <!-- Global Drag & Drop Overlay -->
+    <div class="global-drop-overlay" id="global-drop-overlay">
+        <div class="global-drop-content">
+            <div class="drop-icon-wrapper">
+                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+            </div>
+            <h2>Drop your image here</h2>
+            <p>Supports PNG, JPEG, GIF, WebP, and BMP</p>
+        </div>
+    </div>
+
+    <!-- New Canvas Modal -->
+    <div class="modal-overlay" id="new-canvas-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>New Canvas</h3>
+                <button class="modal-close" id="new-modal-close">&times;</button>
+            </div>
+            <div class="modal-content">
+                <div class="export-option">
+                    <label>Width (px)</label>
+                    <input type="number" id="new-width" value="1920" min="1" max="8000">
+                </div>
+                <div class="export-option">
+                    <label>Height (px)</label>
+                    <input type="number" id="new-height" value="1080" min="1" max="8000">
+                </div>
+                <div class="export-option">
+                    <label>Background</label>
+                    <select id="new-background">
+                        <option value="white">White</option>
+                        <option value="black">Black</option>
+                        <option value="transparent">Transparent</option>
+                        <option value="custom">Custom Color</option>
+                    </select>
+                </div>
+                <div class="export-option" id="custom-bg-option" style="display: none;">
+                    <label>Custom Color</label>
+                    <input type="color" id="new-bg-color" value="#ffffff">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="btn-cancel-new">Cancel</button>
+                <button class="btn-primary" id="btn-confirm-new">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fabric.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    
+    <!-- Application Modules -->
+    <script src="js/history-manager.js"></script>
+    <script src="js/canvas-manager.js"></script>
+    <script src="js/layer-manager.js"></script>
+    <script src="js/file-handler.js"></script>
+    <script src="js/filters/filter-engine.js"></script>
+    <script src="js/tools/brush-tool.js"></script>
+    <script src="js/tools/shape-tool.js"></script>
+    <script src="js/tools/text-tool.js"></script>
+    <script src="js/tools/crop-tool.js"></script>
+    <script src="js/tools/transform-tool.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

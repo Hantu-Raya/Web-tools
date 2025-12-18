@@ -1,43 +1,78 @@
 # Web-tools
 
-| File | Size | Description |
-|------|------|-------------|
-| index.html | ~5 KB | Main HTML page with dark mode UI |
-| style.css | ~12 KB | Custom dark mode styles with glassmorphism, neon gradients |
-| script.js | ~15 KB | Application logic (upload, crop, rotate, flip, download) |
-| cropper.min.js | ~37 KB | Cropper.js library (v1.6.2) |
-| cropper.min.css | ~3 KB | Cropper.js default styles |
-Subfolder: Web-tools/
-This appears to be a Git repository with duplicated files - likely from a previous setup.
+A collection of browser-based image editing tools. No server required - just open in browser.
+
+> **Why I built this:** Other websites don't have the tools I need, are bloated with ads, force you to agree to terms you haven't read, and might even sell your data. These tools run 100% locally in your browser - no uploads, no tracking, no BS.
+
 ---
-Features of the Web App
-Input Methods:
-- Click the drop zone to select a file
-- Ctrl+V to paste an image from clipboard
-- Drag & Drop image files onto the drop zone
-Editing Tools:
-| Button | Function |
-|--------|----------|
-| ↺ | Rotate left 90° |
-| ↻ | Rotate right 90° |
-| ↔ | Flip horizontal |
-| ↕ | Flip vertical |
-| ⟲ | Reset to original |
-| + | Load new image |
-| Download | Save cropped PNG |
-Live Preview:
-- Shows the exact cropped area in real-time
-- Updates as you draw, resize, rotate, flip, or zoom
-Keyboard Shortcuts:
+
+## 🖼️ Image Cropper (`/crop`)
+
+Paste-to-crop tool with live preview.
+
+| File | Description |
+|------|-------------|
+| `index.html` | Dark mode UI with glassmorphism |
+| `style.css` | Neon gradients, dark theme |
+| `script.js` | Upload, crop, rotate, flip, download |
+| `cropper.min.js` | Cropper.js library (v1.6.2) |
+
+**Features:** Ctrl+V paste, drag & drop, rotate, flip, live preview, keyboard shortcuts
+
+---
+
+## 🎨 Photo Editor (`/photo-editor`)
+
+Full-featured web photo editor using Fabric.js.
+
+| File | Description |
+|------|-------------|
+| `index.html` | Main app shell with toolbar, panels, modals |
+| `css/style.css` | Core dark theme with glassmorphism |
+| `css/toolbar.css` | Left toolbar styling |
+| `css/panels.css` | Right-side panels (layers, adjustments, filters) |
+| `js/main.js` | App initialization, keyboard shortcuts |
+| `js/canvas-manager.js` | Fabric.js wrapper, zoom/pan |
+| `js/history-manager.js` | Undo/redo stack (50 states) |
+| `js/layer-manager.js` | Layer list, visibility, reordering |
+| `js/file-handler.js` | Import/export, drag & drop |
+| `js/filters/filter-engine.js` | Brightness, contrast, saturation, presets |
+| `js/tools/*.js` | Brush, shapes, text, crop, transform tools |
+
+**Features:**
+- 🖌️ Brush & eraser with adjustable size
+- 🔷 Shape tools (rectangle, ellipse, line)
+- ✏️ Text tool with font styling
+- ✂️ Crop with aspect ratio support
+- 🔄 Transform (rotate, flip, scale)
+- 🎛️ Adjustments (brightness, contrast, saturation, hue)
+- 🎨 Filter presets (grayscale, sepia, blur, sharpen)
+- 📑 Layer management
+- ↩️ Undo/redo (Ctrl+Z / Ctrl+Y)
+- 📁 Drag & drop anywhere on page
+- 📋 Paste from clipboard (Ctrl+V)
+
+**Keyboard Shortcuts:**
 | Key | Action |
 |-----|--------|
-| Enter | Download cropped image |
-| Escape | Return to drop zone |
-| R | Reset crop |
-| ← | Rotate left |
-| → | Rotate right |
-Design:
-- Dark mode with violet-to-midnight-blue gradient background
-- Glassmorphism card with blur effect
-- Neon gradient download button with animation
-- **Cyan accent
+| `V` | Select |
+| `B` | Brush |
+| `E` | Eraser |
+| `T` | Text |
+| `C` | Crop |
+| `U/O/L` | Rectangle/Ellipse/Line |
+| `Ctrl+Z/Y` | Undo/Redo |
+| `Ctrl+S` | Quick save PNG |
+
+---
+
+## 🚀 Usage
+
+```bash
+# Option 1: Open directly
+open crop/index.html
+open photo-editor/index.html
+
+# Option 2: Serve locally
+npx serve .
+```
