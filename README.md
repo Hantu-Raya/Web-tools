@@ -4,6 +4,14 @@ A collection of browser-based image editing tools. No server required - just ope
 
 > **Why I built this:** Other websites don't have the tools I need, are bloated with ads, force you to agree to terms you haven't read, and might even sell your data. These tools run 100% locally in your browser - no uploads, no tracking, no BS.
 
+## 📋 Requirements
+
+- **Browser:** Any modern browser (Chrome, Firefox, Edge, Safari)
+- **No installation needed** - just open the HTML file
+- **No internet required** after first load (libraries are cached via CDN)
+- **No server/backend** - everything runs 100% client-side in your browser
+- **No account/login** - start using immediately
+
 ---
 
 ## 🖼️ Image Cropper (`/crop`)
