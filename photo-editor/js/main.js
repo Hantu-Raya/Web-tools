@@ -90,7 +90,47 @@ class PhotoLiteApp {
             }
         });
 
+        // Initialize text panel event listeners
+        this.textTool.initTextPanelListeners();
+
+        // Handle text panel visibility based on selection
+        this.canvasManager.canvas.on('selection:created', (e) => {
+            this._handleSelectionChange(e.selected);
+        });
+
+        this.canvasManager.canvas.on('selection:updated', (e) => {
+            this._handleSelectionChange(e.selected);
+        });
+
+        this.canvasManager.canvas.on('selection:cleared', () => {
+            this.textTool.hideTextPanel();
+        });
+
+        // Initialize collapsible panel headers
+        this._initCollapsiblePanels();
+
         // Application ready
+    }
+
+    /**
+     * Initialize collapsible panel click handlers
+     * @private
+     */
+    _initCollapsiblePanels() {
+        const collapsiblePanels = document.querySelectorAll('.panel.collapsible');
+        
+        collapsiblePanels.forEach(panel => {
+            const header = panel.querySelector('.panel-header');
+            if (header) {
+                header.addEventListener('click', (e) => {
+                    // Don't toggle if clicking on buttons inside header
+                    if (e.target.closest('.panel-btn') || e.target.closest('button')) {
+                        return;
+                    }
+                    panel.classList.toggle('collapsed');
+                });
+            }
+        });
     }
 
     /**
@@ -105,6 +145,25 @@ class PhotoLiteApp {
         const dropZone = document.getElementById('drop-zone');
         if (dropZone) {
             dropZone.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * Handle selection change - show/hide text panel based on selection type
+     * @private
+     */
+    _handleSelectionChange(selected) {
+        if (!selected || selected.length === 0) {
+            this.textTool.hideTextPanel();
+            return;
+        }
+
+        const obj = selected[0];
+        if (obj && (obj.type === 'i-text' || obj.type === 'textbox')) {
+            this.textTool.showTextPanel();
+            this.textTool.syncPanelToSelection(obj);
+        } else {
+            this.textTool.hideTextPanel();
         }
     }
 

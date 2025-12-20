@@ -32,11 +32,13 @@ class FileHandler {
      */
     _initEventListeners() {
         const fileInput = document.getElementById('file-input');
+        const addImageInput = document.getElementById('add-image-input');
         const dropZone = document.getElementById('drop-zone');
         const openBtn = document.getElementById('btn-open');
         const saveBtn = document.getElementById('btn-save');
         const exportBtn = document.getElementById('btn-export');
         const newBtn = document.getElementById('btn-new');
+        const addImageBtn = document.getElementById('btn-add-image');
 
         // File input change
         fileInput?.addEventListener('change', (e) => {
@@ -45,9 +47,22 @@ class FileHandler {
             }
         });
 
+        // Add image input change (for adding layers)
+        addImageInput?.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                this.addImageFile(e.target.files[0]);
+                e.target.value = ''; // Reset input for re-selection
+            }
+        });
+
         // Open button
         openBtn?.addEventListener('click', () => {
             fileInput?.click();
+        });
+
+        // Add Image button (add as layer)
+        addImageBtn?.addEventListener('click', () => {
+            addImageInput?.click();
         });
 
         // Save button (quick save as PNG)
@@ -308,6 +323,42 @@ class FileHandler {
             this._updateDimensionsDisplay();
         } catch (error) {
             this._showError('Failed to load image. Please try a different file.');
+        }
+    }
+
+    /**
+     * Add image file as a new layer (does NOT replace existing content)
+     * @param {File} file
+     */
+    async addImageFile(file) {
+        // Validate file type (MIME)
+        if (!this.supportedFormats.includes(file.type)) {
+            this._showError('Unsupported file format. Please use JPEG, PNG, GIF, WebP, or BMP.');
+            return;
+        }
+
+        // Validate file size
+        if (file.size > this.maxFileSize) {
+            this._showError('File too large. Maximum size is 50MB.');
+            return;
+        }
+
+        // Validate magic bytes
+        const validMagic = await this._validateMagicBytes(file);
+        if (!validMagic) {
+            this._showError('File content does not match declared type.');
+            return;
+        }
+
+        try {
+            const dataURL = await this._readFileAsDataURL(file);
+            await this.canvasManager.addImage(dataURL);
+            
+            // Save state
+            this.historyManager.saveState(this.canvas, 'Add Image Layer');
+            this._showSuccess('Image layer added');
+        } catch (error) {
+            this._showError('Failed to add image layer. Please try a different file.');
         }
     }
 

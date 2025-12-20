@@ -54,12 +54,14 @@ Full-featured web photo editor using Fabric.js.
 
 - 🖌️ Brush & eraser with adjustable size
 - 🔷 Shape tools (rectangle, ellipse, line)
-- ✏️ Text tool with font styling
+- ✏️ Text tool with advanced styling (stroke, shadow, opacity)
 - ✂️ Crop with aspect ratio support
 - 🔄 Transform (rotate, flip, scale)
 - 🎛️ Adjustments (brightness, contrast, saturation, hue)
 - 🎨 Filter presets (grayscale, sepia, blur, sharpen)
-- 📚 Layer management with stacking order
+- 📚 Layer management with multi-image support
+- 🖼️ Add Image Layer (import without clearing canvas)
+- 📁 Collapsible panels (Filters, Text Properties)
 - ↩️ Undo/redo (50 states)
 - 📁 Drag & drop anywhere
 - 📋 Paste from clipboard
@@ -112,6 +114,9 @@ npx serve .
 
 ## 📝 Recent Updates (December 2025)
 
+- **Photo Editor:** Add Image Layer button — import additional images without clearing canvas
+- **Photo Editor:** Text Properties Panel — font, size, styles (B/I/U/S), alignment, stroke, shadow, spacing, opacity
+- **Photo Editor:** Collapsible Panels — Filters and Text Properties panels can be collapsed/expanded
 - **Redesign:** Dark premium theme with Outfit font across all tools
 - **Security:** Added image dimension limits, removed debug logging
 - **Photo Editor:** Layer ordering buttons (bring forward/send backward)

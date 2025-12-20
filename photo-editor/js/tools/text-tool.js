@@ -366,6 +366,268 @@ class TextTool {
             'Trebuchet MS'
         ];
     }
+
+    /**
+     * Toggle strikethrough
+     */
+    toggleStrikethrough() {
+        const activeObject = this.canvas.getActiveObject();
+        if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'textbox')) {
+            activeObject.set('linethrough', !activeObject.linethrough);
+            this.canvas.requestRenderAll();
+            this.historyManager.saveState(this.canvas, 'Toggle Strikethrough');
+        }
+    }
+
+    /**
+     * Set stroke (outline) on text
+     * @param {string} color - Stroke color
+     * @param {number} width - Stroke width
+     */
+    setStroke(color, width) {
+        const activeObject = this.canvas.getActiveObject();
+        if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'textbox')) {
+            activeObject.set({
+                stroke: width > 0 ? color : null,
+                strokeWidth: width
+            });
+            this.canvas.requestRenderAll();
+            this.historyManager.saveState(this.canvas, 'Change Text Stroke');
+        }
+    }
+
+    /**
+     * Set text shadow
+     * @param {string} color - Shadow color
+     * @param {number} blur - Blur radius
+     * @param {number} offsetX - X offset
+     * @param {number} offsetY - Y offset
+     */
+    setShadow(color, blur, offsetX, offsetY) {
+        const activeObject = this.canvas.getActiveObject();
+        if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'textbox')) {
+            if (blur > 0 || offsetX !== 0 || offsetY !== 0) {
+                activeObject.set('shadow', new fabric.Shadow({
+                    color: color,
+                    blur: blur,
+                    offsetX: offsetX,
+                    offsetY: offsetY
+                }));
+            } else {
+                activeObject.set('shadow', null);
+            }
+            this.canvas.requestRenderAll();
+            this.historyManager.saveState(this.canvas, 'Change Text Shadow');
+        }
+    }
+
+    /**
+     * Set text opacity
+     * @param {number} opacity - 0 to 1
+     */
+    setOpacity(opacity) {
+        const activeObject = this.canvas.getActiveObject();
+        if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'textbox')) {
+            activeObject.set('opacity', opacity);
+            this.canvas.requestRenderAll();
+            this.historyManager.saveState(this.canvas, 'Change Text Opacity');
+        }
+    }
+
+    /**
+     * Show text properties panel
+     */
+    showTextPanel() {
+        const panel = document.getElementById('text-panel');
+        if (panel) {
+            panel.style.display = 'block';
+            // Auto-expand when showing (remove collapsed state)
+            panel.classList.remove('collapsed');
+        }
+    }
+
+    /**
+     * Hide text properties panel
+     */
+    hideTextPanel() {
+        const panel = document.getElementById('text-panel');
+        if (panel) {
+            panel.style.display = 'none';
+        }
+    }
+
+    /**
+     * Sync text panel UI with selected text object
+     * @param {fabric.Object} textObj - The selected text object
+     */
+    syncPanelToSelection(textObj) {
+        if (!textObj) return;
+
+        // Font family
+        const fontSelect = document.getElementById('text-font-family');
+        if (fontSelect) fontSelect.value = textObj.fontFamily || 'Inter';
+
+        // Font size
+        const sizeSlider = document.getElementById('text-font-size-slider');
+        const sizeInput = document.getElementById('text-font-size');
+        const size = textObj.fontSize || 32;
+        if (sizeSlider) sizeSlider.value = size;
+        if (sizeInput) sizeInput.value = size;
+
+        // Style toggles
+        const boldBtn = document.getElementById('text-bold');
+        const italicBtn = document.getElementById('text-italic');
+        const underlineBtn = document.getElementById('text-underline');
+        const strikeBtn = document.getElementById('text-strikethrough');
+        
+        if (boldBtn) boldBtn.classList.toggle('active', textObj.fontWeight === 'bold');
+        if (italicBtn) italicBtn.classList.toggle('active', textObj.fontStyle === 'italic');
+        if (underlineBtn) underlineBtn.classList.toggle('active', textObj.underline === true);
+        if (strikeBtn) strikeBtn.classList.toggle('active', textObj.linethrough === true);
+
+        // Alignment
+        const alignBtns = document.querySelectorAll('.align-btn');
+        alignBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.align === (textObj.textAlign || 'left'));
+        });
+
+        // Fill color
+        const fillInput = document.getElementById('text-fill-color');
+        if (fillInput) fillInput.value = textObj.fill || '#ffffff';
+
+        // Stroke
+        const strokeColorInput = document.getElementById('text-stroke-color');
+        const strokeWidthInput = document.getElementById('text-stroke-width');
+        if (strokeColorInput) strokeColorInput.value = textObj.stroke || '#000000';
+        if (strokeWidthInput) strokeWidthInput.value = textObj.strokeWidth || 0;
+
+        // Shadow
+        const shadow = textObj.shadow;
+        const shadowColorInput = document.getElementById('text-shadow-color');
+        const shadowBlurInput = document.getElementById('text-shadow-blur');
+        const shadowXInput = document.getElementById('text-shadow-x');
+        const shadowYInput = document.getElementById('text-shadow-y');
+        if (shadowColorInput) shadowColorInput.value = shadow?.color || '#000000';
+        if (shadowBlurInput) shadowBlurInput.value = shadow?.blur || 0;
+        if (shadowXInput) shadowXInput.value = shadow?.offsetX || 2;
+        if (shadowYInput) shadowYInput.value = shadow?.offsetY || 2;
+
+        // Line height
+        const lineHeightSlider = document.getElementById('text-line-height');
+        const lineHeightValue = document.getElementById('text-line-height-value');
+        const lh = textObj.lineHeight || 1.2;
+        if (lineHeightSlider) lineHeightSlider.value = lh;
+        if (lineHeightValue) lineHeightValue.textContent = lh.toFixed(1);
+
+        // Letter spacing
+        const spacingSlider = document.getElementById('text-letter-spacing');
+        const spacingValue = document.getElementById('text-letter-spacing-value');
+        const cs = textObj.charSpacing || 0;
+        if (spacingSlider) spacingSlider.value = cs;
+        if (spacingValue) spacingValue.textContent = cs;
+
+        // Opacity
+        const opacitySlider = document.getElementById('text-opacity');
+        const opacityValue = document.getElementById('text-opacity-value');
+        const op = Math.round((textObj.opacity || 1) * 100);
+        if (opacitySlider) opacitySlider.value = op;
+        if (opacityValue) opacityValue.textContent = op + '%';
+    }
+
+    /**
+     * Initialize text panel event listeners
+     */
+    initTextPanelListeners() {
+        // Font family
+        document.getElementById('text-font-family')?.addEventListener('change', (e) => {
+            this.setFontFamily(e.target.value);
+        });
+
+        // Font size slider
+        const sizeSlider = document.getElementById('text-font-size-slider');
+        const sizeInput = document.getElementById('text-font-size');
+        sizeSlider?.addEventListener('input', (e) => {
+            const size = parseInt(e.target.value);
+            if (sizeInput) sizeInput.value = size;
+            this.setFontSize(size);
+        });
+        sizeInput?.addEventListener('change', (e) => {
+            const size = parseInt(e.target.value) || 32;
+            if (sizeSlider) sizeSlider.value = size;
+            this.setFontSize(size);
+        });
+
+        // Style toggles
+        document.getElementById('text-bold')?.addEventListener('click', () => this.toggleBold());
+        document.getElementById('text-italic')?.addEventListener('click', () => this.toggleItalic());
+        document.getElementById('text-underline')?.addEventListener('click', () => this.toggleUnderline());
+        document.getElementById('text-strikethrough')?.addEventListener('click', () => this.toggleStrikethrough());
+
+        // Alignment buttons
+        document.querySelectorAll('.align-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.setTextAlign(btn.dataset.align);
+                document.querySelectorAll('.align-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            });
+        });
+
+        // Fill color
+        document.getElementById('text-fill-color')?.addEventListener('input', (e) => {
+            this.setTextColor(e.target.value);
+        });
+
+        // Stroke
+        const strokeColorInput = document.getElementById('text-stroke-color');
+        const strokeWidthInput = document.getElementById('text-stroke-width');
+        const updateStroke = () => {
+            const color = strokeColorInput?.value || '#000000';
+            const width = parseInt(strokeWidthInput?.value) || 0;
+            this.setStroke(color, width);
+        };
+        strokeColorInput?.addEventListener('input', updateStroke);
+        strokeWidthInput?.addEventListener('change', updateStroke);
+
+        // Shadow
+        const shadowInputs = ['text-shadow-color', 'text-shadow-blur', 'text-shadow-x', 'text-shadow-y'];
+        const updateShadow = () => {
+            const color = document.getElementById('text-shadow-color')?.value || '#000000';
+            const blur = parseInt(document.getElementById('text-shadow-blur')?.value) || 0;
+            const x = parseInt(document.getElementById('text-shadow-x')?.value) || 2;
+            const y = parseInt(document.getElementById('text-shadow-y')?.value) || 2;
+            this.setShadow(color, blur, x, y);
+        };
+        shadowInputs.forEach(id => {
+            document.getElementById(id)?.addEventListener('change', updateShadow);
+        });
+
+        // Line height
+        const lineHeightSlider = document.getElementById('text-line-height');
+        const lineHeightValue = document.getElementById('text-line-height-value');
+        lineHeightSlider?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (lineHeightValue) lineHeightValue.textContent = val.toFixed(1);
+            this.setLineHeight(val);
+        });
+
+        // Letter spacing
+        const spacingSlider = document.getElementById('text-letter-spacing');
+        const spacingValue = document.getElementById('text-letter-spacing-value');
+        spacingSlider?.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            if (spacingValue) spacingValue.textContent = val;
+            this.setCharSpacing(val);
+        });
+
+        // Opacity
+        const opacitySlider = document.getElementById('text-opacity');
+        const opacityValue = document.getElementById('text-opacity-value');
+        opacitySlider?.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            if (opacityValue) opacityValue.textContent = val + '%';
+            this.setOpacity(val / 100);
+        });
+    }
 }
 
 // Export for module use

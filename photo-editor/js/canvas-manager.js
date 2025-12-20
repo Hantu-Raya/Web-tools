@@ -319,6 +319,66 @@ class CanvasManager {
     }
 
     /**
+     * Add image as a new layer (does NOT clear canvas)
+     * @param {string} src - Image source (URL or base64)
+     * @returns {Promise<fabric.FabricImage>}
+     */
+    async addImage(src) {
+        try {
+            const img = await fabric.FabricImage.fromURL(src, { crossOrigin: 'anonymous' });
+            
+            if (!img) {
+                throw new Error('Failed to load image');
+            }
+
+            // Security: Limit image dimensions
+            const MAX_DIMENSION = 16384;
+            const MAX_PIXELS = 25_000_000;
+            
+            if (img.width > MAX_DIMENSION || img.height > MAX_DIMENSION) {
+                throw new Error(`Image dimensions (${img.width}x${img.height}) exceed maximum of ${MAX_DIMENSION}px`);
+            }
+            
+            if (img.width * img.height > MAX_PIXELS) {
+                throw new Error(`Image size (${(img.width * img.height / 1_000_000).toFixed(1)}MP) exceeds maximum of 25MP`);
+            }
+
+            // Scale image to fit within current canvas if larger
+            let scale = 1;
+            if (img.width > this.width || img.height > this.height) {
+                const scaleX = this.width / img.width;
+                const scaleY = this.height / img.height;
+                scale = Math.min(scaleX, scaleY) * 0.8; // 80% of canvas for margin
+            }
+
+            // Center the image on canvas
+            const centerX = (this.width - img.width * scale) / 2;
+            const centerY = (this.height - img.height * scale) / 2;
+
+            const timestamp = Date.now();
+            img.set({
+                left: centerX,
+                top: centerY,
+                scaleX: scale,
+                scaleY: scale,
+                selectable: true,
+                evented: true,
+                id: 'image_' + timestamp,
+                layerId: 'layer_' + timestamp,
+                layerName: 'Image Layer'
+            });
+
+            this.canvas.add(img);
+            this.canvas.setActiveObject(img);
+            this.canvas.requestRenderAll();
+            
+            return img;
+        } catch (error) {
+            throw new Error(error.message || 'Failed to add image');
+        }
+    }
+
+    /**
      * Create new blank canvas
      * @param {number} width 
      * @param {number} height 
