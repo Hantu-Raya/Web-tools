@@ -110,15 +110,13 @@ npx serve .
 
 ---
 
-## 📝 Recent Updates (December 2024)
+## 📝 Recent Updates (December 2025)
 
 - **Redesign:** Dark premium theme with Outfit font across all tools
 - **Security:** Added image dimension limits, removed debug logging
 - **Photo Editor:** Layer ordering buttons (bring forward/send backward)
 - **Photo Editor:** Fixed text tool to not move underlying objects
 - **Crop Tool:** Added "Back to Tools" navigation link
-
-See `CHANGELOG.txt` for full details.
 
 ---
 
