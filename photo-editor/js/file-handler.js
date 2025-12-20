@@ -397,12 +397,22 @@ class FileHandler {
         if (!filename || typeof filename !== 'string') {
             return '';
         }
-        return filename
+        let s = filename
             .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')  // Remove invalid chars
             .replace(/^\.+/, '')                      // No leading dots
             .replace(/\s+/g, '_')                     // Replace spaces with underscores
             .substring(0, 200)                        // Limit length
             .trim();
+
+        // Remove trailing dots (Windows file system safety)
+        s = s.replace(/\.+$/, '');
+
+        // Check for Windows reserved filenames (CON, PRN, AUX, NUL, COM1-9, LPT1-9), optionally with extension
+        if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i.test(s)) {
+            s = '_' + s;
+        }
+
+        return s;
     }
 
     /**
