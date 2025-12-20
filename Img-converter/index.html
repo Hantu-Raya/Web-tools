@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Converter | Web-Tools</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../style.css"> <!-- Reusing global styles for consistency -->
+</head>
+<body class="tool-page">
+    <div class="container wider">
+        <nav class="back-nav">
+            <a href="../index.html">← Back to Tools</a>
+        </nav>
+
+        <header>
+            <h1>Image Converter</h1>
+            <p class="subtitle">Convert multiple images seamlessly in your browser. Privacy-focused and lightning fast.</p>
+        </header>
+
+        <section class="upload-area" id="drop-zone">
+            <div class="upload-content">
+                <div class="icon big">📤</div>
+                <p>Drag & drop images here or <span>browse files</span></p>
+                <input type="file" id="file-input" multiple accept="image/*" hidden>
+            </div>
+        </section>
+
+        <section class="controls-bar hidden" id="global-controls">
+            <div class="format-select">
+                <label>Convert all to:</label>
+                <select id="global-format">
+                    <option value="image/png">PNG</option>
+                    <option value="image/jpeg">JPEG</option>
+                    <option value="image/webp">WebP</option>
+                </select>
+            </div>
+            <button id="convert-all-btn" class="primary-btn">Convert All</button>
+            <button id="clear-all-btn" class="secondary-btn">Clear All</button>
+        </section>
+
+        <main class="image-grid" id="image-grid">
+            <!-- Image cards will be injected here -->
+        </main>
+
+        <canvas id="conversion-canvas" hidden></canvas>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
