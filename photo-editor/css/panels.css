@@ -84,13 +84,19 @@
 }
 
 .layer-item.active {
-    background: rgba(99, 102, 241, 0.15);
-    border-color: var(--accent-primary);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .layer-item.dragging {
     opacity: 0.5;
     transform: scale(0.98);
+}
+
+.layer-item.drag-over {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
 }
 
 .layer-thumbnail {
@@ -242,7 +248,7 @@
     appearance: none;
     width: 12px;
     height: 12px;
-    background: var(--accent-primary);
+    background: white;
     border-radius: 50%;
     cursor: pointer;
 }
@@ -282,7 +288,7 @@
     appearance: none;
     width: 14px;
     height: 14px;
-    background: var(--accent-primary);
+    background: white;
     border-radius: 50%;
     cursor: pointer;
     transition: transform var(--transition-fast), box-shadow var(--transition-fast);
@@ -290,13 +296,13 @@
 
 .adjustment-slider::-webkit-slider-thumb:hover {
     transform: scale(1.2);
-    box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
 }
 
 .adjustment-slider::-moz-range-thumb {
     width: 14px;
     height: 14px;
-    background: var(--accent-primary);
+    background: white;
     border: none;
     border-radius: 50%;
     cursor: pointer;
@@ -305,8 +311,8 @@
 /* Slider track fill effect */
 .adjustment-slider {
     background: linear-gradient(to right, 
-        var(--accent-primary) 0%, 
-        var(--accent-primary) var(--value, 50%), 
+        white 0%, 
+        white var(--value, 50%), 
         rgba(255, 255, 255, 0.1) var(--value, 50%), 
         rgba(255, 255, 255, 0.1) 100%
     );
@@ -347,8 +353,8 @@
 }
 
 .filter-btn.active {
-    background: rgba(99, 102, 241, 0.15);
-    border-color: var(--accent-primary);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .filter-preview {
@@ -457,7 +463,7 @@
 }
 
 .blend-mode-select:focus {
-    border-color: var(--accent-primary);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 /* Transform Controls */
@@ -524,9 +530,9 @@
 }
 
 .aspect-btn.active {
-    background: rgba(99, 102, 241, 0.15);
-    border-color: var(--accent-primary);
-    color: var(--accent-primary);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: white;
 }
 
 /* History Panel */
@@ -552,7 +558,7 @@
 }
 
 .history-item.current {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .history-item.future {

@@ -71,11 +71,11 @@
 }
 
 .tool-btn.active {
-    color: var(--accent-primary);
+    color: white;
 }
 
 .tool-btn.active::before {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .tool-btn svg {
@@ -94,7 +94,7 @@
     transform: translateY(-50%);
     width: 3px;
     height: 20px;
-    background: var(--accent-primary);
+    background: white;
     border-radius: 0 2px 2px 0;
 }
 
@@ -173,7 +173,7 @@
 }
 
 .color-input:hover {
-    border-color: var(--accent-primary);
+    border-color: rgba(255, 255, 255, 0.3);
     transform: scale(1.05);
 }
 
@@ -221,7 +221,7 @@
     appearance: none;
     width: 14px;
     height: 14px;
-    background: var(--accent-primary);
+    background: white;
     border-radius: 50%;
     cursor: pointer;
     transition: transform var(--transition-fast), box-shadow var(--transition-fast);
@@ -229,13 +229,13 @@
 
 .tool-options input[type="range"]::-webkit-slider-thumb:hover {
     transform: scale(1.2);
-    box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
 }
 
 .tool-options input[type="range"]::-moz-range-thumb {
     width: 14px;
     height: 14px;
-    background: var(--accent-primary);
+    background: white;
     border: none;
     border-radius: 50%;
     cursor: pointer;
@@ -299,7 +299,7 @@
 }
 
 .tool-btn:focus-visible {
-    outline: 2px solid var(--accent-primary);
+    outline: 2px solid rgba(255, 255, 255, 0.5);
     outline-offset: 2px;
 }
 
@@ -338,7 +338,7 @@
 .brush-preview {
     position: fixed;
     pointer-events: none;
-    border: 2px solid var(--accent-primary);
+    border: 2px solid white;
     border-radius: 50%;
     opacity: 0;
     transition: opacity var(--transition-fast);

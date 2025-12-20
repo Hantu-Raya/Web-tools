@@ -3,12 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
+    <meta name="referrer" content="no-referrer" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self';">
-    <title>PhotoLite - Web Photo Editor</title>
+    <meta name="description" content="Advanced photo editing with layers, filters, and professional canvas controls." />
+    <title>Photo Editor | Web-Tools</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/toolbar.css">
     <link rel="stylesheet" href="css/panels.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" crossorigin="anonymous">
 </head>
 <body>
     <div class="app-container">
@@ -243,6 +247,16 @@
                     <div class="panel-header">
                         <h3>Layers</h3>
                         <div class="panel-actions">
+                            <button class="panel-btn" id="btn-layer-up" title="Bring Forward">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="18 15 12 9 6 15"/>
+                                </svg>
+                            </button>
+                            <button class="panel-btn" id="btn-layer-down" title="Send Backward">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </button>
                             <button class="panel-btn" id="btn-add-layer" title="Add Layer">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <line x1="12" y1="5" x2="12" y2="19"/>

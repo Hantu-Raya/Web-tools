@@ -16,6 +16,7 @@ class LayerManager {
         this.layersList = document.getElementById('layers-list');
         
         this._initEventListeners();
+        this._initDragAndDrop(); // Initialize drag & drop once
     }
 
     /**
@@ -69,6 +70,15 @@ class LayerManager {
         // Delete layer button
         document.getElementById('btn-delete-layer')?.addEventListener('click', () => {
             this.deleteActiveLayer();
+        });
+
+        // Layer ordering buttons
+        document.getElementById('btn-layer-up')?.addEventListener('click', () => {
+            this.bringActiveForward();
+        });
+
+        document.getElementById('btn-layer-down')?.addEventListener('click', () => {
+            this.sendActiveBackward();
         });
     }
 
@@ -289,37 +299,173 @@ class LayerManager {
 
     /**
      * Initialize drag and drop for layer reordering
+     * Uses mouse-based sorting for better compatibility
      * @private
      */
     _initDragAndDrop() {
-        let draggedItem = null;
-
-        this.layersList.querySelectorAll('.layer-item').forEach(item => {
-            item.addEventListener('dragstart', (e) => {
-                draggedItem = item;
-                item.classList.add('dragging');
-                e.dataTransfer.effectAllowed = 'move';
-            });
-
-            item.addEventListener('dragend', () => {
-                item.classList.remove('dragging');
-                draggedItem = null;
-            });
-
-            item.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-            });
-
-            item.addEventListener('drop', (e) => {
-                e.preventDefault();
-                if (draggedItem && draggedItem !== item) {
-                    const fromId = draggedItem.dataset.layerId;
-                    const toId = item.dataset.layerId;
-                    this.reorderLayers(fromId, toId);
-                }
-            });
+        if (this._dragDropInitialized) return;
+        this._dragDropInitialized = true;
+        
+        const self = this;
+        let draggedEl = null;
+        let draggedId = null;
+        let placeholder = null;
+        let startY = 0;
+        let isDragging = false;
+        
+        // Mouse-based sorting (works everywhere)
+        this.layersList.addEventListener('mousedown', function(e) {
+            // Only left click, not on buttons
+            if (e.button !== 0) return;
+            if (e.target.closest('button')) return;
+            
+            const layerItem = e.target.closest('.layer-item');
+            if (!layerItem) return;
+            
+            // Start drag after a small delay to distinguish from click
+            startY = e.clientY;
+            draggedEl = layerItem;
+            draggedId = layerItem.dataset.layerId;
+            
+            // Prevent text selection
+            e.preventDefault();
         });
+        
+        document.addEventListener('mousemove', function(e) {
+            if (!draggedEl) return;
+            
+            // Only start dragging after moving 5px
+            if (!isDragging && Math.abs(e.clientY - startY) < 5) return;
+            
+            if (!isDragging) {
+                isDragging = true;
+                draggedEl.classList.add('dragging');
+                
+                // Create placeholder
+                placeholder = document.createElement('div');
+                placeholder.className = 'layer-item-placeholder';
+                placeholder.style.height = draggedEl.offsetHeight + 'px';
+                placeholder.style.background = 'rgba(255, 255, 255, 0.1)';
+                placeholder.style.border = '2px dashed rgba(255, 255, 255, 0.3)';
+                placeholder.style.borderRadius = '8px';
+                placeholder.style.marginBottom = '4px';
+            }
+            
+            // Find drop target
+            const items = Array.from(self.layersList.querySelectorAll('.layer-item:not(.dragging)'));
+            let targetItem = null;
+            
+            for (const item of items) {
+                const rect = item.getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                
+                if (e.clientY < midY) {
+                    targetItem = item;
+                    break;
+                }
+            }
+            
+            // Update visual feedback
+            items.forEach(item => item.classList.remove('drag-over'));
+            
+            if (targetItem) {
+                targetItem.classList.add('drag-over');
+            }
+        });
+        
+        document.addEventListener('mouseup', function(e) {
+            if (!draggedEl) return;
+            
+            if (isDragging) {
+                // Find drop target
+                const items = Array.from(self.layersList.querySelectorAll('.layer-item:not(.dragging)'));
+                let targetItem = null;
+                
+                for (const item of items) {
+                    const rect = item.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    
+                    if (e.clientY < midY) {
+                        targetItem = item;
+                        break;
+                    }
+                }
+                
+                // If no target found, drop at end (bottom layer)
+                if (!targetItem && items.length > 0) {
+                    targetItem = items[items.length - 1];
+                }
+                
+                // Perform reorder
+                if (targetItem && targetItem.dataset.layerId !== draggedId) {
+                    const toId = targetItem.dataset.layerId;
+                    self.reorderLayers(draggedId, toId);
+                }
+                
+                // Cleanup
+                draggedEl.classList.remove('dragging');
+                items.forEach(item => item.classList.remove('drag-over'));
+                if (placeholder && placeholder.parentNode) {
+                    placeholder.parentNode.removeChild(placeholder);
+                }
+            }
+            
+            draggedEl = null;
+            draggedId = null;
+            placeholder = null;
+            isDragging = false;
+        });
+        
+        // Also keep HTML5 drag-drop for browsers that prefer it
+        this.layersList.addEventListener('dragstart', function(e) {
+            const layerItem = e.target.closest('.layer-item');
+            if (!layerItem) return;
+            
+            self._draggedLayerId = layerItem.dataset.layerId;
+            layerItem.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', self._draggedLayerId || '');
+        }, false);
+        
+        this.layersList.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            const layerItem = e.target.closest('.layer-item');
+            if (layerItem && layerItem.dataset.layerId !== self._draggedLayerId) {
+                self.layersList.querySelectorAll('.layer-item').forEach(item => {
+                    item.classList.remove('drag-over');
+                });
+                layerItem.classList.add('drag-over');
+            }
+        }, false);
+        
+        this.layersList.addEventListener('drop', function(e) {
+            e.preventDefault();
+            
+            const targetItem = e.target.closest('.layer-item');
+            self.layersList.querySelectorAll('.layer-item').forEach(item => {
+                item.classList.remove('drag-over', 'dragging');
+            });
+            
+            if (!targetItem) return;
+            
+            const fromId = self._draggedLayerId || e.dataTransfer.getData('text/plain');
+            const toId = targetItem.dataset.layerId;
+            
+            if (fromId && toId && fromId !== toId) {
+                self.reorderLayers(fromId, toId);
+            }
+            
+            self._draggedLayerId = null;
+        }, false);
+        
+        this.layersList.addEventListener('dragend', function(e) {
+            self.layersList.querySelectorAll('.layer-item').forEach(item => {
+                item.classList.remove('dragging', 'drag-over');
+            });
+            self._draggedLayerId = null;
+        }, false);
     }
 
     /**
@@ -432,6 +578,94 @@ class LayerManager {
                 this.canvas.requestRenderAll();
                 this._syncLayersFromCanvas();
             }
+        }
+    }
+
+    /**
+     * Bring layer to front (top of stack)
+     * @param {string} layerId 
+     */
+    bringToFront(layerId) {
+        const layer = this.layers.find(l => l.id === layerId);
+        if (layer && layer.object) {
+            this.canvas.bringObjectToFront(layer.object);
+            this.canvas.requestRenderAll();
+            this._syncLayersFromCanvas();
+        }
+    }
+
+    /**
+     * Send layer to back (bottom of stack)
+     * @param {string} layerId 
+     */
+    sendToBack(layerId) {
+        const layer = this.layers.find(l => l.id === layerId);
+        if (layer && layer.object) {
+            this.canvas.sendObjectToBack(layer.object);
+            this.canvas.requestRenderAll();
+            this._syncLayersFromCanvas();
+        }
+    }
+
+    /**
+     * Bring layer forward (one step up)
+     * @param {string} layerId 
+     */
+    bringForward(layerId) {
+        const layer = this.layers.find(l => l.id === layerId);
+        if (layer && layer.object) {
+            this.canvas.bringObjectForward(layer.object);
+            this.canvas.requestRenderAll();
+            this._syncLayersFromCanvas();
+        }
+    }
+
+    /**
+     * Send layer backward (one step down)
+     * @param {string} layerId 
+     */
+    sendBackward(layerId) {
+        const layer = this.layers.find(l => l.id === layerId);
+        if (layer && layer.object) {
+            this.canvas.sendObjectBackwards(layer.object);
+            this.canvas.requestRenderAll();
+            this._syncLayersFromCanvas();
+        }
+    }
+
+    /**
+     * Bring active layer to front
+     */
+    bringActiveToFront() {
+        if (this.activeLayerId) {
+            this.bringToFront(this.activeLayerId);
+        }
+    }
+
+    /**
+     * Send active layer to back
+     */
+    sendActiveToBack() {
+        if (this.activeLayerId) {
+            this.sendToBack(this.activeLayerId);
+        }
+    }
+
+    /**
+     * Bring active layer forward
+     */
+    bringActiveForward() {
+        if (this.activeLayerId) {
+            this.bringForward(this.activeLayerId);
+        }
+    }
+
+    /**
+     * Send active layer backward
+     */
+    sendActiveBackward() {
+        if (this.activeLayerId) {
+            this.sendBackward(this.activeLayerId);
         }
     }
 

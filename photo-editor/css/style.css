@@ -1,47 +1,54 @@
 /* =====================================================
    PhotoLite - Core Styles
-   Deep Dark Mode with Sophisticated Gradient
+   Unified Dark Premium Theme (matching Web-Tools homepage)
    ===================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap");
 
 /* CSS Custom Properties (Design Tokens) */
 :root {
-    /* Background Gradient - Deep Black with Light-ish Grey */
-    --bg-primary: linear-gradient(135deg, #0d0d0d 0%, #1a1a2e 50%, #2d2d44 100%);
-    --bg-solid: #0d0d0d;
+    /* Background - Dark Wood Theme */
+    --bg-dark: #0a0a0a;
+    --bg-primary: radial-gradient(circle at center, #1a1a1a 0%, #0a0a0a 100%);
+    --bg-solid: #0a0a0a;
     
     /* Panel Backgrounds - Glassmorphism */
-    --panel-bg: rgba(30, 30, 46, 0.85);
-    --panel-bg-solid: #1e1e2e;
-    --panel-border: rgba(255, 255, 255, 0.08);
+    --wood-black: #121212;
+    --wood-gray: #2c2c2c;
+    --panel-bg: rgba(30, 30, 30, 0.6);
+    --panel-bg-solid: #1e1e1e;
+    --panel-border: rgba(255, 255, 255, 0.05);
     --panel-hover: rgba(255, 255, 255, 0.05);
+    --card-bg: rgba(30, 30, 30, 0.6);
     
     /* Canvas Area */
-    --canvas-bg: #121218;
-    --canvas-pattern: #1a1a22;
+    --canvas-bg: #0d0d0d;
+    --canvas-pattern: #1a1a1a;
     
-    /* Accent Colors */
-    --accent-primary: #6366f1;
-    --accent-hover: #818cf8;
-    --accent-active: #4f46e5;
-    --accent-success: #22c55e;
-    --accent-warning: #f59e0b;
-    --accent-danger: #ef4444;
+    /* Accent Colors - Subtle white/gray instead of purple */
+    --accent-primary: #ffffff;
+    --accent-hover: #e0e0e0;
+    --accent-active: #cccccc;
+    --accent-success: #4ade80;
+    --accent-warning: #fbbf24;
+    --accent-danger: #f87171;
+    --accent-glow: rgba(255, 255, 255, 0.05);
     
     /* Text Hierarchy */
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    --text-disabled: #475569;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --text-muted: #666666;
+    --text-disabled: #444444;
     
     /* Glassmorphism */
     --glass-blur: blur(12px);
-    --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.05);
     
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-    --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.3);
+    --shadow-glow: 0 0 20px rgba(255, 255, 255, 0.1);
     
     /* Spacing */
     --spacing-xs: 4px;
@@ -84,17 +91,40 @@ html {
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: var(--bg-primary);
+    background-color: var(--bg-dark);
     color: var(--text-primary);
     min-height: 100vh;
     overflow: hidden;
     line-height: 1.5;
+    position: relative;
+}
+
+/* Wood Grain Effect Overlay */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient(
+        90deg,
+        transparent 0,
+        transparent 2px,
+        rgba(0, 0, 0, 0.1) 2px,
+        rgba(0, 0, 0, 0.1) 4px
+    ),
+    linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+    opacity: 0.3;
+    z-index: -1;
+    pointer-events: none;
 }
 
 /* Selection */
 ::selection {
-    background: var(--accent-primary);
+    background: rgba(255, 255, 255, 0.2);
     color: white;
 }
 
@@ -110,13 +140,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-sm);
     transition: background var(--transition-fast);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.2);
 }
 
 /* App Container */
@@ -153,7 +183,7 @@ body {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-    color: var(--accent-primary);
+    color: var(--text-primary);
     font-weight: 600;
     font-size: 1.1rem;
     padding-right: var(--spacing-lg);
@@ -162,7 +192,7 @@ body {
 }
 
 .logo svg {
-    stroke: var(--accent-primary);
+    stroke: var(--text-primary);
 }
 
 .file-menu {
@@ -178,6 +208,7 @@ body {
     background: transparent;
     border: none;
     color: var(--text-secondary);
+    font-family: inherit;
     font-size: 0.875rem;
     font-weight: 500;
     border-radius: var(--radius-md);
@@ -255,12 +286,13 @@ body {
     align-items: center;
     gap: var(--spacing-sm);
     padding: var(--spacing-sm) var(--spacing-lg);
-    background: var(--accent-primary);
+    background: white;
     border: none;
-    color: white;
+    color: black;
+    font-family: inherit;
     font-size: 0.875rem;
     font-weight: 600;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     cursor: pointer;
     transition: all var(--transition-fast);
     box-shadow: var(--shadow-sm);
@@ -308,7 +340,6 @@ body {
     box-shadow: var(--shadow-lg);
     border-radius: var(--radius-sm);
     overflow: hidden;
-    /* Transparency checkerboard pattern (like Photoshop) */
     background-image: 
         linear-gradient(45deg, #404040 25%, transparent 25%),
         linear-gradient(-45deg, #404040 25%, transparent 25%),
@@ -319,7 +350,6 @@ body {
     background-color: #2a2a2a;
 }
 
-/* Fabric.js canvas container - needs transparency pattern too */
 .canvas-wrapper .canvas-container {
     background-image: 
         linear-gradient(45deg, #404040 25%, transparent 25%),
@@ -336,7 +366,6 @@ body {
     background: transparent !important;
 }
 
-/* Fabric.js creates a lower-canvas and upper-canvas - both should be transparent */
 .canvas-container canvas {
     background: transparent !important;
 }
@@ -348,7 +377,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(13, 13, 13, 0.9);
+    background: rgba(10, 10, 10, 0.95);
     opacity: 1;
     transition: opacity var(--transition-normal);
     z-index: 50;
@@ -361,12 +390,12 @@ body {
 }
 
 .drop-zone.drag-over {
-    background: rgba(99, 102, 241, 0.2);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .drop-zone.drag-over .drop-zone-content {
     transform: scale(1.05);
-    border-color: var(--accent-primary);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .drop-zone-content {
@@ -375,7 +404,7 @@ body {
     align-items: center;
     gap: var(--spacing-md);
     padding: var(--spacing-xl) 60px;
-    border: 2px dashed var(--panel-border);
+    border: 2px dashed rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-xl);
     transition: all var(--transition-normal);
 }
@@ -386,7 +415,7 @@ body {
 }
 
 .drop-zone.drag-over .drop-zone-content svg {
-    stroke: var(--accent-primary);
+    stroke: var(--text-primary);
 }
 
 .drop-zone-content h3 {
@@ -428,7 +457,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(4px);
     z-index: 1000;
     opacity: 0;
@@ -445,7 +474,7 @@ body {
     width: 100%;
     max-width: 400px;
     background: var(--panel-bg-solid);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-xl);
     border: var(--glass-border);
     box-shadow: var(--shadow-lg);
     transform: scale(0.95) translateY(20px);
@@ -525,6 +554,7 @@ body {
     border: 1px solid var(--panel-border);
     border-radius: var(--radius-md);
     color: var(--text-primary);
+    font-family: inherit;
     font-size: 0.875rem;
     outline: none;
     transition: border-color var(--transition-fast);
@@ -533,20 +563,21 @@ body {
 .export-option select:focus,
 .export-option input[type="text"]:focus,
 .export-option input[type="number"]:focus {
-    border-color: var(--accent-primary);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .export-option input[type="range"] {
     width: 100%;
-    accent-color: var(--accent-primary);
+    accent-color: white;
 }
 
 /* Buttons */
 .btn-primary {
     padding: var(--spacing-sm) var(--spacing-lg);
-    background: var(--accent-primary);
+    background: white;
     border: none;
-    color: white;
+    color: black;
+    font-family: inherit;
     font-size: 0.875rem;
     font-weight: 600;
     border-radius: var(--radius-md);
@@ -556,6 +587,7 @@ body {
 
 .btn-primary:hover {
     background: var(--accent-hover);
+    transform: translateY(-1px);
 }
 
 .btn-secondary {
@@ -563,6 +595,7 @@ body {
     background: transparent;
     border: 1px solid var(--panel-border);
     color: var(--text-secondary);
+    font-family: inherit;
     font-size: 0.875rem;
     font-weight: 500;
     border-radius: var(--radius-md);
@@ -582,6 +615,7 @@ body {
     background: transparent;
     border: 1px solid var(--panel-border);
     color: var(--text-secondary);
+    font-family: inherit;
     font-size: 0.8rem;
     font-weight: 500;
     border-radius: var(--radius-md);
@@ -590,7 +624,7 @@ body {
 }
 
 .btn-reset:hover {
-    background: rgba(239, 68, 68, 0.1);
+    background: rgba(248, 113, 113, 0.1);
     border-color: var(--accent-danger);
     color: var(--accent-danger);
 }
@@ -636,7 +670,7 @@ body {
     position: fixed;
     width: 80px;
     height: 80px;
-    border: 3px solid var(--accent-primary);
+    border: 3px solid white;
     border-radius: 50%;
     pointer-events: none;
     z-index: 9999;
@@ -656,10 +690,10 @@ body {
     left: 50%;
     width: 2px;
     height: 2px;
-    background: var(--accent-primary);
+    background: white;
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5);
 }
 
 /* Responsive Adjustments */
@@ -681,7 +715,6 @@ body {
 
 /* =====================================================
    Global Drag & Drop Overlay
-   Full-screen overlay when dragging files onto the page
    ===================================================== */
 
 .global-drop-overlay {
@@ -690,7 +723,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(13, 13, 20, 0.95);
+    background: rgba(10, 10, 10, 0.95);
     backdrop-filter: blur(8px);
     z-index: 10000;
     opacity: 0;
@@ -711,17 +744,17 @@ body {
     align-items: center;
     gap: var(--spacing-lg);
     padding: var(--spacing-xl) 80px;
-    border: 3px dashed rgba(99, 102, 241, 0.5);
+    border: 3px dashed rgba(255, 255, 255, 0.2);
     border-radius: var(--radius-xl);
-    background: rgba(99, 102, 241, 0.05);
+    background: rgba(255, 255, 255, 0.02);
     transform: scale(0.9);
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .global-drop-overlay.active .global-drop-content {
     transform: scale(1);
-    border-color: var(--accent-primary);
-    background: rgba(99, 102, 241, 0.1);
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .drop-icon-wrapper {
@@ -730,25 +763,25 @@ body {
     justify-content: center;
     width: 140px;
     height: 140px;
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(129, 140, 248, 0.1) 100%);
+    background: rgba(255, 255, 255, 0.05);
     border-radius: 50%;
     animation: pulse-glow 2s ease-in-out infinite;
 }
 
 .drop-icon-wrapper svg {
-    stroke: var(--accent-primary);
-    filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.5));
+    stroke: white;
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
     animation: float-up 1.5s ease-in-out infinite;
 }
 
 @keyframes pulse-glow {
     0%, 100% {
-        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3),
-                    0 0 40px rgba(99, 102, 241, 0.1);
+        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.1),
+                    0 0 40px rgba(255, 255, 255, 0.05);
     }
     50% {
-        box-shadow: 0 0 0 20px rgba(99, 102, 241, 0),
-                    0 0 60px rgba(99, 102, 241, 0.2);
+        box-shadow: 0 0 0 20px rgba(255, 255, 255, 0),
+                    0 0 60px rgba(255, 255, 255, 0.1);
     }
 }
 
@@ -776,12 +809,11 @@ body {
     margin: 0;
 }
 
-/* Drag-over state on body - subtle border */
 body.drag-active::before {
     content: '';
     position: fixed;
     inset: 0;
-    border: 4px solid var(--accent-primary);
+    border: 4px solid rgba(255, 255, 255, 0.3);
     border-radius: 0;
     pointer-events: none;
     z-index: 9999;
@@ -790,24 +822,20 @@ body.drag-active::before {
 
 @keyframes border-pulse {
     0%, 100% {
-        border-color: var(--accent-primary);
+        border-color: rgba(255, 255, 255, 0.3);
     }
     50% {
-        border-color: var(--accent-hover);
+        border-color: rgba(255, 255, 255, 0.5);
     }
 }
 
-/* =====================================================
-   Toast Notifications
-   Non-blocking user feedback system
-   ===================================================== */
-
+/* Toast Notifications */
 .toast-container {
     position: fixed;
-    bottom: calc(var(--status-height) + var(--spacing-lg));
-    right: var(--spacing-lg);
+    bottom: 60px;
+    right: 20px;
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
     gap: var(--spacing-sm);
     z-index: 10001;
     pointer-events: none;
@@ -817,127 +845,36 @@ body.drag-active::before {
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
-    min-width: 280px;
-    max-width: 400px;
     padding: var(--spacing-md) var(--spacing-lg);
     background: var(--panel-bg-solid);
     border: var(--glass-border);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    pointer-events: auto;
-    transform: translateX(120%);
-    opacity: 0;
-    animation: toast-in 0.3s ease forwards;
-}
-
-.toast.toast-out {
-    animation: toast-out 0.25s ease forwards;
-}
-
-@keyframes toast-in {
-    0% {
-        transform: translateX(120%);
-        opacity: 0;
-    }
-    100% {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes toast-out {
-    0% {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    100% {
-        transform: translateX(120%);
-        opacity: 0;
-    }
-}
-
-.toast__icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    flex-shrink: 0;
-}
-
-.toast__icon svg {
-    width: 20px;
-    height: 20px;
-}
-
-.toast__content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.toast__title {
+    color: var(--text-primary);
     font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--text-primary);
+    pointer-events: auto;
+    animation: slideIn 0.3s ease-out;
 }
 
-.toast__message {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    line-height: 1.4;
-}
-
-.toast__close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: all var(--transition-fast);
-}
-
-.toast__close:hover {
-    background: var(--panel-hover);
-    color: var(--text-primary);
-}
-
-/* Toast Variants */
-.toast--error {
-    border-left: 3px solid var(--accent-danger);
-}
-
-.toast--error .toast__icon {
-    color: var(--accent-danger);
-}
-
-.toast--success {
+.toast.success {
     border-left: 3px solid var(--accent-success);
 }
 
-.toast--success .toast__icon {
-    color: var(--accent-success);
+.toast.error {
+    border-left: 3px solid var(--accent-danger);
 }
 
-.toast--warning {
-    border-left: 3px solid var(--accent-warning);
+.toast.info {
+    border-left: 3px solid white;
 }
 
-.toast--warning .toast__icon {
-    color: var(--accent-warning);
-}
-
-.toast--info {
-    border-left: 3px solid var(--accent-primary);
-}
-
-.toast--info .toast__icon {
-    color: var(--accent-primary);
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }

@@ -281,6 +281,18 @@ class CanvasManager {
                 throw new Error('Failed to load image');
             }
 
+            // Security: Limit image dimensions to prevent memory exhaustion
+            const MAX_DIMENSION = 16384;
+            const MAX_PIXELS = 25_000_000; // 25 megapixels
+            
+            if (img.width > MAX_DIMENSION || img.height > MAX_DIMENSION) {
+                throw new Error(`Image dimensions (${img.width}x${img.height}) exceed maximum of ${MAX_DIMENSION}px`);
+            }
+            
+            if (img.width * img.height > MAX_PIXELS) {
+                throw new Error(`Image size (${(img.width * img.height / 1_000_000).toFixed(1)}MP) exceeds maximum of 25MP`);
+            }
+
             // Resize canvas to fit image
             this.resize(img.width, img.height);
             
@@ -302,7 +314,7 @@ class CanvasManager {
             
             return img;
         } catch (error) {
-            throw new Error('Failed to load image');
+            throw new Error(error.message || 'Failed to load image');
         }
     }
 

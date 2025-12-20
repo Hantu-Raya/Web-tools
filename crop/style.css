@@ -1,14 +1,23 @@
 /**
- * Image Cropper - Dark Mode Stylesheet
- * 
- * Color Palette:
- * - Background Gradient: Deep Violet (#1a0a2e) to Midnight Blue (#0d1b2a)
- * - Card Background: Dark Charcoal (#1e1e2e)
- * - Primary Text: Off-White (#e4e4e7)
- * - Secondary Text: Muted Gray (#a1a1aa)
- * - Neon Accent Gradient: Electric Cyan (#00f5d4) to Vivid Magenta (#f72585)
- * - Secondary Button: Slate (#2d2d3a)
+ * Image Cropper - Unified Dark Premium Theme
+ * Matching Web-Tools homepage and Image Converter aesthetic
  */
+
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap");
+
+/* ============================================
+   CSS Variables (matching homepage)
+   ============================================ */
+:root {
+    --bg-dark: #0a0a0a;
+    --wood-black: #121212;
+    --wood-gray: #2c2c2c;
+    --accent-glow: rgba(255, 255, 255, 0.05);
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --card-bg: rgba(30, 30, 30, 0.6);
+    --transition-speed: 0.4s;
+}
 
 /* ============================================
    CSS Reset & Base Styles
@@ -28,19 +37,57 @@ html {
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, 
-                 Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: "Outfit", sans-serif;
     min-height: 100vh;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
-    padding: 1.5rem;
-    
-    /* Deep Violet to Midnight Blue gradient */
-    background: linear-gradient(135deg, #1a0a2e 0%, #0d1b2a 50%, #0a0f1a 100%);
-    background-attachment: fixed;
-    color: #e4e4e7;
+    padding: 2rem;
+    background-color: var(--bg-dark);
+    background: radial-gradient(circle at center, #1a1a1a 0%, #0a0a0a 100%);
+    color: var(--text-primary);
     line-height: 1.6;
+    position: relative;
+}
+
+/* Wood Grain Effect Overlay */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient(
+        90deg,
+        transparent 0,
+        transparent 2px,
+        rgba(0, 0, 0, 0.1) 2px,
+        rgba(0, 0, 0, 0.1) 4px
+    ),
+    linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+    opacity: 0.4;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes popIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
 }
 
 /* ============================================
@@ -48,17 +95,26 @@ body {
    ============================================ */
 .container {
     width: 100%;
-    max-width: 900px;
-    background: rgba(30, 30, 46, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 1.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 
-        0 25px 50px -12px rgba(0, 0, 0, 0.5),
-        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-    padding: 2.5rem;
-    overflow: hidden;
+    max-width: 1000px;
+    animation: fadeInUp 0.8s ease-out forwards;
+}
+
+/* ============================================
+   Back Navigation
+   ============================================ */
+.back-nav {
+    margin-bottom: 2rem;
+}
+
+.back-nav a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.3s;
+}
+
+.back-nav a:hover {
+    color: white;
 }
 
 /* ============================================
@@ -66,24 +122,24 @@ body {
    ============================================ */
 .header {
     text-align: center;
-    margin-bottom: 2rem;
+    margin-bottom: 2.5rem;
 }
 
 .title {
-    font-size: 2rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #00f5d4 0%, #7b2cbf 50%, #f72585 100%);
+    font-size: 2.5rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    letter-spacing: -1px;
+    background: linear-gradient(to bottom, #ffffff, #888);
     -webkit-background-clip: text;
-    background-clip: text;
     -webkit-text-fill-color: transparent;
-    letter-spacing: -0.02em;
-    margin-bottom: 0.5rem;
+    background-clip: text;
 }
 
 .subtitle {
-    font-size: 0.95rem;
-    color: #a1a1aa;
-    font-weight: 400;
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    font-weight: 300;
 }
 
 /* ============================================
@@ -94,54 +150,56 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 3.5rem 2rem;
-    border: 2px dashed rgba(255, 255, 255, 0.15);
-    border-radius: 1rem;
-    background: rgba(45, 45, 58, 0.4);
+    padding: 4rem 2rem;
+    border: 2px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    background: rgba(40, 40, 40, 0.4);
     cursor: pointer;
-    transition: all 0.25s ease;
+    transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
     min-height: 280px;
+    backdrop-filter: blur(10px);
 }
 
 .drop-zone:hover,
 .drop-zone--active {
-    border-color: #00f5d4;
-    background: rgba(0, 245, 212, 0.05);
-    transform: translateY(-2px);
+    background: rgba(60, 60, 60, 0.6);
+    border-color: var(--text-secondary);
+    transform: scale(1.01);
 }
 
 .drop-zone__icon {
-    color: #a1a1aa;
+    color: var(--text-secondary);
     margin-bottom: 1.25rem;
-    transition: color 0.25s ease, transform 0.25s ease;
+    transition: all 0.3s ease;
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.1));
 }
 
 .drop-zone:hover .drop-zone__icon {
-    color: #00f5d4;
+    color: white;
     transform: scale(1.1);
 }
 
 .drop-zone__text {
     font-size: 1.1rem;
-    color: #e4e4e7;
+    color: var(--text-primary);
     margin-bottom: 0.5rem;
 }
 
 .drop-zone__text kbd {
     display: inline-block;
-    padding: 0.2rem 0.5rem;
+    padding: 0.25rem 0.6rem;
     font-family: inherit;
     font-size: 0.85rem;
-    background: rgba(0, 245, 212, 0.15);
-    border: 1px solid rgba(0, 245, 212, 0.3);
-    border-radius: 0.35rem;
-    color: #00f5d4;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: white;
     margin: 0 0.15rem;
 }
 
 .drop-zone__hint {
     font-size: 0.85rem;
-    color: #6b6b7b;
+    color: var(--text-secondary);
 }
 
 .drop-zone--hidden {
@@ -157,18 +215,7 @@ body {
 
 .editor-container--visible {
     display: block;
-    animation: fadeIn 0.35s ease;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    animation: popIn 0.4s ease;
 }
 
 /* ============================================
@@ -176,7 +223,7 @@ body {
    ============================================ */
 .editor-layout {
     display: grid;
-    grid-template-columns: 1fr 220px;
+    grid-template-columns: 1fr 240px;
     gap: 1.5rem;
     margin-bottom: 1.5rem;
 }
@@ -185,15 +232,15 @@ body {
     width: 100%;
     min-height: 300px;
     max-height: 500px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 0.75rem;
-    overflow: visible; /* Allow rotated images to display */
+    background: var(--wood-black);
+    border-radius: 16px;
+    overflow: visible;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .cropper-wrapper img {
     display: block;
     max-width: 100%;
-    /* Don't set max-height on img - let Cropper.js handle it */
 }
 
 /* ============================================
@@ -202,63 +249,63 @@ body {
 .preview-panel {
     display: flex;
     flex-direction: column;
-    background: rgba(45, 45, 58, 0.5);
-    border-radius: 0.75rem;
-    padding: 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
 }
 
 .preview-panel__title {
     font-size: 0.85rem;
-    font-weight: 600;
-    color: #a1a1aa;
+    font-weight: 500;
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
     text-align: center;
 }
 
 .preview-container {
     width: 100%;
     height: 180px;
-    background: rgba(0, 0, 0, 0.4);
-    border-radius: 0.5rem;
+    background: var(--wood-black);
+    border-radius: 12px;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(0, 245, 212, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .preview-panel__hint {
     font-size: 0.75rem;
-    color: #6b6b7b;
+    color: var(--text-secondary);
     text-align: center;
-    margin-top: 0.75rem;
-    line-height: 1.4;
+    margin-top: 1rem;
+    line-height: 1.5;
 }
 
 /* ============================================
    Cropper.js Theme Overrides
    ============================================ */
 .cropper-container {
-    border-radius: 0.75rem;
+    border-radius: 16px;
 }
 
 .cropper-view-box {
-    outline: 2px solid #00f5d4;
-    outline-color: rgba(0, 245, 212, 0.85);
+    outline: 2px solid rgba(255, 255, 255, 0.8);
 }
 
 .cropper-line {
-    background-color: #00f5d4;
+    background-color: rgba(255, 255, 255, 0.5);
 }
 
 .cropper-point {
-    background-color: #00f5d4;
+    background-color: white;
     width: 10px;
     height: 10px;
-    opacity: 1;
+    opacity: 0.9;
 }
 
 .cropper-point.point-se {
@@ -271,7 +318,7 @@ body {
 }
 
 .cropper-modal {
-    background-color: rgba(10, 15, 26, 0.75);
+    background-color: rgba(10, 10, 10, 0.75);
 }
 
 /* ============================================
@@ -283,6 +330,11 @@ body {
     gap: 0.75rem;
     justify-content: center;
     align-items: center;
+    background: var(--card-bg);
+    padding: 1.25rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
 }
 
 /* Base Button Styles */
@@ -296,61 +348,47 @@ body {
     font-weight: 500;
     font-family: inherit;
     border: none;
-    border-radius: 0.625rem;
+    border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s ease;
     outline: none;
 }
 
 .btn:focus-visible {
-    box-shadow: 0 0 0 3px rgba(0, 245, 212, 0.4);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
 }
 
 /* Secondary Button (Icon buttons) */
 .btn--secondary {
-    background: #2d2d3a;
-    color: #e4e4e7;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
     min-width: 48px;
     padding: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .btn--secondary:hover {
-    background: #3d3d4a;
-    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
 }
 
 .btn--secondary:active {
     transform: translateY(0);
 }
 
-/* Primary Button (Download - Neon Gradient) */
+/* Primary Button (Download) */
 .btn--primary {
-    background: linear-gradient(135deg, #00f5d4 0%, #7b2cbf 50%, #f72585 100%);
-    background-size: 200% 200%;
-    color: #fff;
+    background: white;
+    color: black;
     font-weight: 600;
-    padding: 0.85rem 1.5rem;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-    box-shadow: 
-        0 4px 15px rgba(0, 245, 212, 0.25),
-        0 2px 8px rgba(247, 37, 133, 0.2);
-    animation: gradientShift 4s ease infinite;
-}
-
-@keyframes gradientShift {
-    0%, 100% {
-        background-position: 0% 50%;
-    }
-    50% {
-        background-position: 100% 50%;
-    }
+    padding: 0.85rem 1.75rem;
+    box-shadow: 0 4px 20px rgba(255, 255, 255, 0.1);
 }
 
 .btn--primary:hover {
+    background: #e0e0e0;
     transform: translateY(-2px);
-    box-shadow: 
-        0 6px 20px rgba(0, 245, 212, 0.35),
-        0 4px 12px rgba(247, 37, 133, 0.3);
+    box-shadow: 0 6px 25px rgba(255, 255, 255, 0.15);
 }
 
 .btn--primary:active {
@@ -360,25 +398,19 @@ body {
 /* ============================================
    Responsive Adjustments
    ============================================ */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
     body {
         padding: 1rem;
-        align-items: flex-start;
-        padding-top: 2rem;
-    }
-
-    .container {
-        padding: 1.5rem;
-        border-radius: 1rem;
     }
 
     .title {
-        font-size: 1.5rem;
+        font-size: 2rem;
     }
 
     .drop-zone {
-        padding: 2.5rem 1.5rem;
+        padding: 3rem 1.5rem;
         min-height: 220px;
+        border-radius: 16px;
     }
 
     .drop-zone__icon svg {
@@ -396,10 +428,6 @@ body {
         max-height: 350px;
     }
 
-    .cropper-wrapper img {
-        /* Let Cropper.js handle sizing */
-    }
-
     .preview-panel {
         order: -1;
     }
@@ -410,6 +438,7 @@ body {
 
     .controls {
         gap: 0.5rem;
+        padding: 1rem;
     }
 
     .btn--secondary {

@@ -63,6 +63,16 @@ class TextTool {
         this.canvas.selection = false;
         this.canvas.defaultCursor = 'text';
         
+        // Disable all object selection/movement to allow clicking anywhere for text
+        this.canvas.forEachObject(obj => {
+            // Store original state
+            obj._textToolSelectable = obj.selectable;
+            obj._textToolEvented = obj.evented;
+            // Disable interaction
+            obj.selectable = false;
+            obj.evented = false;
+        });
+        
         this._bindClickHandler();
     }
 
@@ -73,6 +83,15 @@ class TextTool {
         this.isActive = false;
         this.canvas.selection = true;
         this.canvas.defaultCursor = 'default';
+        
+        // Restore all object selection/movement
+        this.canvas.forEachObject(obj => {
+            // Restore original state (respect locked layers)
+            const wasSelectable = obj._textToolSelectable !== undefined ? obj._textToolSelectable : true;
+            const wasEvented = obj._textToolEvented !== undefined ? obj._textToolEvented : true;
+            obj.selectable = wasSelectable && !obj.isLocked;
+            obj.evented = wasEvented && !obj.isLocked;
+        });
         
         this._unbindClickHandler();
     }
@@ -101,9 +120,8 @@ class TextTool {
     _handleClick(opt) {
         if (!this.isActive) return;
         
-        // Don't add text if clicking on existing object
-        if (opt.target) return;
-
+        // Since all objects are disabled when text tool is active,
+        // we can add text at any click position
         const pointer = this.canvas.getPointer(opt.e);
         this.addText('Text', pointer.x, pointer.y);
     }

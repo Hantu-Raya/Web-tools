@@ -19,8 +19,6 @@ class PhotoLiteApp {
      * Initialize the application
      */
     init() {
-        console.log('🎨 PhotoLite initializing...');
-
         // Initialize core managers
         this.historyManager = new HistoryManager(50);
         this.canvasManager = new CanvasManager('main-canvas');
@@ -92,7 +90,7 @@ class PhotoLiteApp {
             }
         });
 
-        console.log('✅ PhotoLite ready!');
+        // Application ready
     }
 
     /**
