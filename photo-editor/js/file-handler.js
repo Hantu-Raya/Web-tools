@@ -154,10 +154,10 @@ class FileHandler {
             document.body.classList.remove('drag-active');
             overlay?.classList.remove('active');
 
-            const files = e.dataTransfer?.files;
-            if (files && files.length > 0) {
-                // Load the first file
-                this.loadFile(files[0]);
+            // Security: Validate that dropped item is a File instance
+            const file = e.dataTransfer?.files?.[0];
+            if (file instanceof File) {
+                this.loadFile(file);
             }
         });
 

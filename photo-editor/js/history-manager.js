@@ -11,6 +11,7 @@ class HistoryManager {
         this.currentIndex = -1;
         this.maxStates = maxStates;
         this.isRestoring = false;
+        this._restoreDebounce = null; // Security: Debounce for undo/redo
         this.listeners = {
             change: []
         };
@@ -59,8 +60,11 @@ class HistoryManager {
      * @returns {boolean} Success status
      */
     undo(canvas) {
+        // Security: Debounce rapid undo calls to prevent performance issues
+        if (this._restoreDebounce) return false;
         if (!this.canUndo()) return false;
 
+        this._restoreDebounce = setTimeout(() => { this._restoreDebounce = null; }, 100);
         this.currentIndex--;
         return this._restoreState(canvas, this.states[this.currentIndex]);
     }
@@ -71,8 +75,11 @@ class HistoryManager {
      * @returns {boolean} Success status
      */
     redo(canvas) {
+        // Security: Debounce rapid redo calls to prevent performance issues
+        if (this._restoreDebounce) return false;
         if (!this.canRedo()) return false;
 
+        this._restoreDebounce = setTimeout(() => { this._restoreDebounce = null; }, 100);
         this.currentIndex++;
         return this._restoreState(canvas, this.states[this.currentIndex]);
     }

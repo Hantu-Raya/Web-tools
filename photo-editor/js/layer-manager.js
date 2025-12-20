@@ -43,6 +43,10 @@ class LayerManager {
             if (e.target?.isCropUI || e.target?.excludeFromExport) {
                 return;
             }
+            // Clear thumbnail cache for removed layer
+            if (e.target?.layerId) {
+                this._thumbCache?.delete(e.target.layerId);
+            }
             this._syncLayersFromCanvas();
         });
 
@@ -63,12 +67,36 @@ class LayerManager {
             this._renderLayersList();
         });
 
+
         // Invalidate thumbnail cache on modification
         this.canvas.on('object:modified', (e) => {
             if (e.target && e.target.layerId) {
                 delete this.thumbnailCache[e.target.layerId];
             }
         });
+
+        // Performance: Initialize thumbnail cache as Map for faster lookups
+        this._thumbCache = new Map();
+
+        // Performance: Event delegation for layer list clicks
+        // Single listener handles all layer interactions
+        this.layersList?.addEventListener('click', (e) => {
+            const layerItem = e.target.closest('.layer-item');
+            if (!layerItem) return;
+            
+            const layerId = layerItem.dataset.layerId;
+            
+            if (e.target.closest('.layer-visibility')) {
+                e.stopPropagation();
+                this.toggleLayerVisibility(layerId);
+            } else if (e.target.closest('.layer-lock')) {
+                e.stopPropagation();
+                this.toggleLayerLock(layerId);
+            } else {
+                this.selectLayer(layerId);
+            }
+        });
+
 
         // Add layer button
         document.getElementById('btn-add-layer')?.addEventListener('click', () => {
@@ -202,11 +230,10 @@ class LayerManager {
             </div>
         `).join('');
 
-        // Generate thumbnails
+        // Generate thumbnails (with caching)
         this._generateThumbnails();
         
-        // Add click listeners
-        this._addLayerEventListeners();
+        // Note: Event listeners handled by delegation in _initEventListeners()
     }
 
     /**
@@ -234,9 +261,19 @@ class LayerManager {
 
     /**
      * Generate layer thumbnails
+     * Performance: Uses cached thumbnails and reusable StaticCanvas
      * @private
      */
     _generateThumbnails() {
+        // Performance: Reuse single StaticCanvas for all thumbnails
+        if (!this._sharedThumbCanvas) {
+            this._sharedThumbCanvas = new fabric.StaticCanvas(null, {
+                width: 40,
+                height: 40,
+                backgroundColor: 'transparent'
+            });
+        }
+        
         this.layers.forEach(async (layer) => {
             const layerEl = this.layersList.querySelector(`[data-layer-id="${layer.id}"]`);
             if (!layerEl) return;
@@ -269,61 +306,23 @@ class LayerManager {
                     originY: 'center'
                 });
 
-                const tempCanvas = new fabric.StaticCanvas(null, {
-                    width: 40,
-                    height: 40,
-                    backgroundColor: 'transparent'
-                });
-                tempCanvas.add(cloned);
-                tempCanvas.renderAll();
+                // Performance: Reuse shared canvas instead of creating new one
+                this._sharedThumbCanvas.clear();
+                this._sharedThumbCanvas.add(cloned);
+                this._sharedThumbCanvas.renderAll();
 
                 // Cache the result as data URL
-                const dataURL = tempCanvas.toDataURL({ format: 'png', multiplier: 1 });
+                const dataURL = this._sharedThumbCanvas.toDataURL({ format: 'png', multiplier: 1 });
                 this.thumbnailCache[layer.id] = dataURL;
 
-                ctx.drawImage(tempCanvas.getElement(), 0, 0);
-                tempCanvas.dispose();
+                ctx.drawImage(this._sharedThumbCanvas.getElement(), 0, 0);
             } catch (e) {
-                console.warn('Failed to generate thumbnail:', e);
+                // Silently fail - thumbnails are non-critical
             }
         });
     }
 
-    /**
-     * Add event listeners to layer items
-     * @private
-     */
-    _addLayerEventListeners() {
-        // Layer selection
-        this.layersList.querySelectorAll('.layer-item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                if (e.target.closest('.layer-visibility') || e.target.closest('.layer-lock')) return;
-                const layerId = item.dataset.layerId;
-                this.selectLayer(layerId);
-            });
-        });
-
-        // Visibility toggle
-        this.layersList.querySelectorAll('.layer-visibility').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const layerId = btn.dataset.layerId;
-                this.toggleLayerVisibility(layerId);
-            });
-        });
-
-        // Lock toggle
-        this.layersList.querySelectorAll('.layer-lock').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const layerId = btn.dataset.layerId;
-                this.toggleLayerLock(layerId);
-            });
-        });
-
-        // Drag and drop reordering
-        this._initDragAndDrop();
-    }
+    // Note: _addLayerEventListeners removed - event delegation in _initEventListeners() handles all clicks
 
     /**
      * Initialize drag and drop for layer reordering

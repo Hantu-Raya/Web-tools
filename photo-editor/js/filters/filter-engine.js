@@ -378,10 +378,17 @@ class FilterEngine {
 
     /**
      * Set adjustment values programmatically
+     * Security: Whitelist validation to prevent prototype pollution
      * @param {Object} values 
      */
     setAdjustments(values) {
-        this.adjustments = { ...this.adjustments, ...values };
+        // Security: Only allow known adjustment keys (prevents prototype pollution)
+        const safeKeys = ['brightness', 'contrast', 'saturation', 'hue', 'exposure'];
+        safeKeys.forEach(key => {
+            if (key in values) {
+                this.adjustments[key] = Number(values[key]) || 0;
+            }
+        });
         
         // Update UI
         Object.entries(this.adjustments).forEach(([key, value]) => {

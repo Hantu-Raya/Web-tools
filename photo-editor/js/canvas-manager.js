@@ -33,12 +33,15 @@ class CanvasManager {
             backgroundColor: '#ffffff',
             preserveObjectStacking: true,
             selection: true,
-            renderOnAddRemove: true
+            renderOnAddRemove: false // Performance: Manual render control
         });
 
         // Store original dimensions
         this.originalWidth = this.width;
         this.originalHeight = this.height;
+        
+        // Performance: Batched rendering flag
+        this._renderScheduled = false;
 
         this._initEventListeners();
         this._updateWrapperSize();
@@ -52,6 +55,19 @@ class CanvasManager {
                 this._updateDimensionsDisplay();
                 this.fitToScreen();
             }
+        });
+    }
+
+    /**
+     * Performance: Schedule a batched render using requestAnimationFrame
+     * Prevents multiple render calls in the same frame
+     */
+    scheduleRender() {
+        if (this._renderScheduled) return;
+        this._renderScheduled = true;
+        requestAnimationFrame(() => {
+            this._renderScheduled = false;
+            this.canvas.requestRenderAll();
         });
     }
 
@@ -303,7 +319,8 @@ class CanvasManager {
                 selectable: true,
                 evented: true,
                 id: 'image_' + Date.now(),
-                layerId: 'layer_' + Date.now()
+                layerId: 'layer_' + Date.now(),
+                objectCaching: true // Performance: Enable Fabric.js object caching
             });
 
             this.canvas.clear();
@@ -365,7 +382,8 @@ class CanvasManager {
                 evented: true,
                 id: 'image_' + timestamp,
                 layerId: 'layer_' + timestamp,
-                layerName: 'Image Layer'
+                layerName: 'Image Layer',
+                objectCaching: true // Performance: Enable Fabric.js object caching
             });
 
             this.canvas.add(img);
