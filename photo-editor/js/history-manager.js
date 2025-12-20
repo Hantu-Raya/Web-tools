@@ -104,12 +104,14 @@ class HistoryManager {
 
         // First, restore canvas dimensions if they were saved
         if (state.canvasWidth && state.canvasHeight) {
-            canvas.setWidth(state.canvasWidth);
-            canvas.setHeight(state.canvasHeight);
+            if (canvas.getWidth() !== state.canvasWidth || canvas.getHeight() !== state.canvasHeight) {
+                canvas.setWidth(state.canvasWidth);
+                canvas.setHeight(state.canvasHeight);
+            }
         }
         
         // Restore background color
-        if (state.backgroundColor !== undefined) {
+        if (state.backgroundColor !== undefined && canvas.backgroundColor !== state.backgroundColor) {
             canvas.backgroundColor = state.backgroundColor;
         }
 

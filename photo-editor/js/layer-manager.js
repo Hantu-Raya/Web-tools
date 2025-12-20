@@ -12,6 +12,7 @@ class LayerManager {
         this.layers = [];
         this.activeLayerId = null;
         this.layerCounter = 0;
+        this.thumbnailCache = {}; // Cache for layer thumbnails
         
         this.layersList = document.getElementById('layers-list');
         
@@ -60,6 +61,13 @@ class LayerManager {
         this.canvas.on('selection:cleared', () => {
             this.activeLayerId = null;
             this._renderLayersList();
+        });
+
+        // Invalidate thumbnail cache on modification
+        this.canvas.on('object:modified', (e) => {
+            if (e.target && e.target.layerId) {
+                delete this.thumbnailCache[e.target.layerId];
+            }
         });
 
         // Add layer button
@@ -128,6 +136,14 @@ class LayerManager {
                 locked: obj.isLocked === true,
                 object: obj
             })).reverse(); // Reverse for visual top-to-bottom order
+
+        // Clean up cache for removed layers
+        const activeIds = new Set(this.layers.map(l => l.id));
+        Object.keys(this.thumbnailCache).forEach(id => {
+            if (!activeIds.has(id)) {
+                delete this.thumbnailCache[id];
+            }
+        });
 
         this._renderLayersList();
     }
@@ -231,6 +247,14 @@ class LayerManager {
             const ctx = thumbCanvas.getContext('2d');
             ctx.clearRect(0, 0, 40, 40);
 
+            // Check cache first
+            if (this.thumbnailCache[layer.id]) {
+                const img = new Image();
+                img.onload = () => ctx.drawImage(img, 0, 0);
+                img.src = this.thumbnailCache[layer.id];
+                return;
+            }
+
             // Fabric.js v6: clone() returns a Promise
             try {
                 const cloned = await layer.object.clone();
@@ -252,6 +276,10 @@ class LayerManager {
                 });
                 tempCanvas.add(cloned);
                 tempCanvas.renderAll();
+
+                // Cache the result as data URL
+                const dataURL = tempCanvas.toDataURL({ format: 'png', multiplier: 1 });
+                this.thumbnailCache[layer.id] = dataURL;
 
                 ctx.drawImage(tempCanvas.getElement(), 0, 0);
                 tempCanvas.dispose();
@@ -791,11 +819,14 @@ class LayerManager {
      * Flatten all layers to background
      */
     async flattenImage() {
-        const dataURL = this.canvasManager.exportAsDataURL({ format: 'png' });
+        // Optimization: Use canvas element directly to avoid PNG encoding/decoding
+        const element = this.canvas.toCanvasElement({
+            multiplier: 1,
+            format: 'png'
+        });
         
         try {
-            // Fabric.js v6: FabricImage.fromURL returns a Promise
-            const img = await fabric.FabricImage.fromURL(dataURL, { crossOrigin: 'anonymous' });
+            const img = new fabric.FabricImage(element);
             
             this.canvas.clear();
             this.canvas.backgroundColor = '#ffffff';

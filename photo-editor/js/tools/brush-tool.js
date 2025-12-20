@@ -240,8 +240,8 @@ class BrushTool {
                 ctx.globalCompositeOperation = 'source-over';
 
                 // Create new image from result
-                const resultDataURL = tempCanvas.toDataURL('image/png');
-                const newImg = await fabric.FabricImage.fromURL(resultDataURL, { crossOrigin: 'anonymous' });
+                // Optimization: Use canvas directly to avoid expensive PNG encoding/decoding
+                const newImg = new fabric.FabricImage(tempCanvas);
 
                 // Position at origin (transforms already baked in)
                 newImg.set({
@@ -347,14 +347,13 @@ class BrushTool {
             return;
         }
 
-        // Export the group to data URL
-        const dataURL = this.drawingLayer.toDataURL({
-            format: 'png',
+        // Optimization: Convert to canvas element directly to avoid PNG encoding/decoding
+        const element = this.drawingLayer.toCanvasElement({
             multiplier: 1
         });
 
-        // Create image from the group
-        const img = await fabric.FabricImage.fromURL(dataURL, { crossOrigin: 'anonymous' });
+        // Create image from the canvas element
+        const img = new fabric.FabricImage(element);
         
         img.set({
             left: this.drawingLayer.left,
