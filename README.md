@@ -1,4 +1,4 @@
-# Web-tools
+# Web-Tools
 
 A collection of browser-based image editing tools. No server required - just open in browser.
 
@@ -13,22 +13,36 @@ A collection of browser-based image editing tools. No server required - just ope
 - ✅ No Node.js, npm, or build tools
 - ✅ No server or backend
 - ✅ No account or login
-- ✅ Works offline after first load (Fabric.js cached from CDN)
+- ✅ Works offline after first load
 
 ---
 
-## 🖼️ Image Cropper (`/crop`)
+## 🔄 Image Converter (`/Img-converter`)
+
+Batch convert images between formats.
+
+| Feature  | Description                     |
+| -------- | ------------------------------- |
+| Formats  | JPEG, PNG, WebP, GIF            |
+| Batch    | Convert multiple images at once |
+| Preview  | Live preview before conversion  |
+| Download | Individual or bulk download     |
+
+---
+
+## 🖼️ Quick Crop (`/crop`)
 
 Paste-to-crop tool with live preview.
 
-| File | Description |
-|------|-------------|
-| `index.html` | Dark mode UI with glassmorphism |
-| `style.css` | Neon gradients, dark theme |
-| `script.js` | Upload, crop, rotate, flip, download |
-| `cropper.min.js` | Cropper.js library (v1.6.2) |
+| Feature       | Description                            |
+| ------------- | -------------------------------------- |
+| Paste         | Ctrl+V to crop from clipboard          |
+| Drag & Drop   | Drop images directly                   |
+| Rotate/Flip   | 90° rotation, horizontal/vertical flip |
+| Aspect Ratios | Free, 1:1, 16:9, 4:3                   |
+| Live Preview  | See result before downloading          |
 
-**Features:** Ctrl+V paste, drag & drop, rotate, flip, live preview, keyboard shortcuts
+**Keyboard:** `R` rotate, `H` flip horizontal, `V` flip vertical
 
 ---
 
@@ -36,21 +50,8 @@ Paste-to-crop tool with live preview.
 
 Full-featured web photo editor using Fabric.js.
 
-| File | Description |
-|------|-------------|
-| `index.html` | Main app shell with toolbar, panels, modals |
-| `css/style.css` | Core dark theme with glassmorphism |
-| `css/toolbar.css` | Left toolbar styling |
-| `css/panels.css` | Right-side panels (layers, adjustments, filters) |
-| `js/main.js` | App initialization, keyboard shortcuts |
-| `js/canvas-manager.js` | Fabric.js wrapper, zoom/pan |
-| `js/history-manager.js` | Undo/redo stack (50 states) |
-| `js/layer-manager.js` | Layer list, visibility, reordering |
-| `js/file-handler.js` | Import/export, drag & drop |
-| `js/filters/filter-engine.js` | Brightness, contrast, saturation, presets |
-| `js/tools/*.js` | Brush, shapes, text, crop, transform tools |
+### Features
 
-**Features:**
 - 🖌️ Brush & eraser with adjustable size
 - 🔷 Shape tools (rectangle, ellipse, line)
 - ✏️ Text tool with font styling
@@ -58,32 +59,75 @@ Full-featured web photo editor using Fabric.js.
 - 🔄 Transform (rotate, flip, scale)
 - 🎛️ Adjustments (brightness, contrast, saturation, hue)
 - 🎨 Filter presets (grayscale, sepia, blur, sharpen)
-- 📑 Layer management
-- ↩️ Undo/redo (Ctrl+Z / Ctrl+Y)
-- 📁 Drag & drop anywhere on page
-- 📋 Paste from clipboard (Ctrl+V)
+- 📚 Layer management with stacking order
+- ↩️ Undo/redo (50 states)
+- 📁 Drag & drop anywhere
+- 📋 Paste from clipboard
+- 🔒 Secure file handling (magic byte validation, size limits)
 
-**Keyboard Shortcuts:**
-| Key | Action |
-|-----|--------|
-| `V` | Select |
-| `B` | Brush |
-| `E` | Eraser |
-| `T` | Text |
-| `C` | Crop |
-| `U/O/L` | Rectangle/Ellipse/Line |
-| `Ctrl+Z/Y` | Undo/Redo |
-| `Ctrl+S` | Quick save PNG |
+### Keyboard Shortcuts
+
+| Key      | Action                       |
+| -------- | ---------------------------- |
+| `V`      | Select                       |
+| `M`      | Move (pan)                   |
+| `B`      | Brush                        |
+| `E`      | Eraser                       |
+| `T`      | Text                         |
+| `C`      | Crop                         |
+| `I`      | Eyedropper                   |
+| `U/O/L`  | Rectangle/Ellipse/Line       |
+| `[/]`    | Decrease/Increase brush size |
+| `Ctrl+Z` | Undo                         |
+| `Ctrl+Y` | Redo                         |
+| `Ctrl+S` | Quick save PNG               |
+| `Escape` | Cancel operation             |
+| `Enter`  | Apply crop                   |
+| `Delete` | Delete selected              |
+
+---
+
+## 🔒 Security
+
+All tools run 100% client-side with these protections:
+
+- **File validation:** Magic byte checking, MIME type whitelist
+- **Size limits:** 50MB max file, 25MP max image
+- **Sanitization:** Filename sanitization, HTML escaping
+- **No tracking:** No analytics, no cookies, no uploads
 
 ---
 
 ## 🚀 Usage
 
 ```bash
-# Option 1: Open directly
-open crop/index.html
-open photo-editor/index.html
+# Option 1: Open directly in browser
+open index.html
 
 # Option 2: Serve locally
 npx serve .
 ```
+
+---
+
+## 📝 Recent Updates (December 2024)
+
+- **Redesign:** Dark premium theme with Outfit font across all tools
+- **Security:** Added image dimension limits, removed debug logging
+- **Photo Editor:** Layer ordering buttons (bring forward/send backward)
+- **Photo Editor:** Fixed text tool to not move underlying objects
+- **Crop Tool:** Added "Back to Tools" navigation link
+
+See `CHANGELOG.txt` for full details.
+
+---
+
+## 🛠️ Tech Stack
+
+| Tool            | Libraries     |
+| --------------- | ------------- |
+| Image Converter | Vanilla JS    |
+| Quick Crop      | Cropper.js    |
+| Photo Editor    | Fabric.js 6.x |
+
+All styling uses vanilla CSS with CSS variables for theming.
