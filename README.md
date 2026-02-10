@@ -1,5 +1,7 @@
 # Web-Tools
 
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-live-brightgreen)](https://hantu-raya.github.io/Web-tools/)
+
 A collection of browser-based image editing tools. No server required - just open in browser.
 
 > **Why I built this:** Other websites don't have the tools I need, are bloated with ads, force you to agree to terms you haven't read, and might even sell your data. These tools run 100% locally in your browser - no uploads, no tracking, no BS.
