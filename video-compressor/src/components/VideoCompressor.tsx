@@ -1,0 +1,692 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
+import {
+  BlobSource,
+  BufferTarget,
+  canEncodeAudio,
+  canEncodeVideo,
+  Conversion,
+  Input,
+  MATROSKA,
+  MP4,
+  Mp4OutputFormat,
+  Output,
+  QTFF,
+  WEBM,
+} from "mediabunny";
+import {
+  ArrowLeftIcon as ArrowLeft,
+  CheckCircleIcon as CheckCircle,
+  DownloadSimpleIcon as DownloadSimple,
+  FileVideoIcon as FileVideo,
+  GaugeIcon as Gauge,
+  HardDrivesIcon as HardDrives,
+  ShieldCheckIcon as ShieldCheck,
+  SlidersHorizontalIcon as SlidersHorizontal,
+  UploadSimpleIcon as UploadSimple,
+  WarningCircleIcon as WarningCircle,
+  XIcon as X,
+} from "@phosphor-icons/react";
+
+const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
+const MIN_VIDEO_BITRATE_KBPS = 150;
+const MIN_AUDIO_BITRATE_KBPS = 64;
+const CONTAINER_HEADROOM = 0.96;
+const HARDWARE_RATE_COMPENSATION = 1.06;
+
+type Phase =
+  | "empty"
+  | "ready"
+  | "loading"
+  | "analyzing"
+  | "pass-one"
+  | "pass-two"
+  | "finalizing"
+  | "complete"
+  | "error";
+
+interface VideoDetails {
+  duration: number;
+  width: number;
+  height: number;
+}
+
+interface SelectedVideo extends VideoDetails {
+  file: File;
+  previewUrl: string;
+}
+
+interface CompressionResult {
+  url: string;
+  fileName: string;
+  size: number;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDuration(seconds: number): string {
+  const totalSeconds = Math.round(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`;
+}
+
+function safeFileStem(fileName: string): string {
+  const stem = fileName.replace(/\.[^/.]+$/, "");
+  return stem.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "video";
+}
+
+function inputExtension(fileName: string): string {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  return extension && /^[a-z0-9]{1,5}$/.test(extension) ? extension : "mp4";
+}
+
+function readVideoDetails(file: File): Promise<VideoDetails> {
+  const { promise, resolve, reject } = Promise.withResolvers<VideoDetails>();
+  const video = document.createElement("video");
+  const objectUrl = URL.createObjectURL(file);
+
+  const cleanUp = () => {
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  video.preload = "metadata";
+  video.onloadedmetadata = () => {
+    const details = {
+      duration: video.duration,
+      width: video.videoWidth,
+      height: video.videoHeight,
+    };
+    cleanUp();
+
+    if (!Number.isFinite(details.duration) || details.duration <= 0) {
+      reject(new Error("The video duration could not be read."));
+      return;
+    }
+
+    resolve(details);
+  };
+  video.onerror = () => {
+    cleanUp();
+    reject(new Error("This browser could not read the selected video."));
+  };
+  video.src = objectUrl;
+
+  return promise;
+}
+
+function targetBounds(video: SelectedVideo): { min: number; max: number } {
+  const sourceMegabytes = video.file.size / 1_000_000;
+  const codecFloor =
+    (video.duration * (MIN_VIDEO_BITRATE_KBPS + MIN_AUDIO_BITRATE_KBPS)) /
+    8000 /
+    CONTAINER_HEADROOM;
+  const max = Math.max(0.2, sourceMegabytes * 0.95);
+  const min = Math.min(max, Math.max(0.2, codecFloor));
+  return { min, max };
+}
+
+function chooseAudioBitrate(totalBitrate: number): number {
+  if (totalBitrate >= 1200) return 128;
+  if (totalBitrate >= 500) return 96;
+  return MIN_AUDIO_BITRATE_KBPS;
+}
+
+function phaseLabel(phase: Phase): string {
+  switch (phase) {
+    case "loading":
+      return "Loading the local compression engine";
+    case "analyzing":
+      return "Preparing the video";
+    case "pass-one":
+      return "Analyzing motion and detail";
+    case "pass-two":
+      return "Encoding toward your target";
+    case "finalizing":
+      return "Finalizing the MP4";
+    default:
+      return "Working locally in your browser";
+  }
+}
+
+
+export default function VideoCompressor() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const passRef = useRef<1 | 2>(1);
+  const isCancellingRef = useRef(false);
+  const coreBlobUrlsRef = useRef<string[]>([]);
+  const conversionRef = useRef<Conversion | null>(null);
+  const engineModeRef = useRef<"hardware" | "single" | null>(null);
+  const [video, setVideo] = useState<SelectedVideo | null>(null);
+  const [targetSize, setTargetSize] = useState(0);
+  const [phase, setPhase] = useState<Phase>("empty");
+  const [progress, setProgress] = useState(0);
+  const [statusCopy, setStatusCopy] = useState("");
+  const [error, setError] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const [result, setResult] = useState<CompressionResult | null>(null);
+  const [engineMode, setEngineMode] = useState<"hardware" | "single" | null>(null);
+
+  const isProcessing = [
+    "loading",
+    "analyzing",
+    "pass-one",
+    "pass-two",
+    "finalizing",
+  ].includes(phase);
+
+  useEffect(() => {
+    return () => {
+      if (video?.previewUrl) URL.revokeObjectURL(video.previewUrl);
+    };
+  }, [video]);
+
+  useEffect(() => {
+    return () => {
+      if (result?.url) URL.revokeObjectURL(result.url);
+    };
+  }, [result]);
+
+  useEffect(() => {
+    return () => {
+      void conversionRef.current?.cancel();
+      ffmpegRef.current?.terminate();
+      coreBlobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  const bounds = useMemo(() => (video ? targetBounds(video) : { min: 0.2, max: 1 }), [video]);
+  const bitratePlan = useMemo(() => {
+    if (!video || targetSize <= 0) return null;
+    const total = Math.floor((targetSize * 8000 * CONTAINER_HEADROOM) / video.duration);
+    const audio = chooseAudioBitrate(total);
+    return {
+      audio,
+      total,
+      video: Math.max(MIN_VIDEO_BITRATE_KBPS, total - audio),
+      source: Math.round((video.file.size * 8) / video.duration / 1000),
+    };
+  }, [targetSize, video]);
+
+  const resetResult = () => {
+    setResult(null);
+    setProgress(0);
+    setStatusCopy("");
+  };
+
+  const selectFile = async (file: File | undefined) => {
+    if (!file || isProcessing) return;
+
+    setError("");
+    resetResult();
+
+    if (!file.type.startsWith("video/")) {
+      setError("Choose a video file such as MP4, WebM, MOV, or MKV.");
+      setPhase(video ? "ready" : "error");
+      return;
+    }
+
+    if (file.size > MAX_FILE_BYTES) {
+      setError("Choose a video smaller than 2 GB. Browser memory cannot safely process larger files.");
+      setPhase(video ? "ready" : "error");
+      return;
+    }
+
+    setPhase("analyzing");
+    setStatusCopy("Reading video details");
+
+    try {
+      const details = await readVideoDetails(file);
+      const selected: SelectedVideo = {
+        file,
+        ...details,
+        previewUrl: URL.createObjectURL(file),
+      };
+      const nextBounds = targetBounds(selected);
+      setVideo(selected);
+      setTargetSize(Number(((nextBounds.min + nextBounds.max) / 2).toFixed(1)));
+      setPhase("ready");
+      setStatusCopy("");
+    } catch (selectionError) {
+      setError(selectionError instanceof Error ? selectionError.message : "The video could not be opened.");
+      setPhase(video ? "ready" : "error");
+      setStatusCopy("");
+    } finally {
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const removeVideo = () => {
+    if (isProcessing) return;
+    setVideo(null);
+    setTargetSize(0);
+    setError("");
+    resetResult();
+    setPhase("empty");
+  };
+
+  const ensureFFmpeg = async (): Promise<FFmpeg> => {
+    if (ffmpegRef.current?.loaded) return ffmpegRef.current;
+
+    const ffmpeg = new FFmpeg();
+    ffmpeg.on("progress", ({ progress: currentProgress }) => {
+      const normalized = Math.max(0, Math.min(1, currentProgress));
+      const overall = passRef.current === 1 ? 10 + normalized * 40 : 50 + normalized * 47;
+      setProgress(Math.round(overall));
+    });
+    ffmpeg.on("log", ({ message }) => {
+      if (message.includes("time=")) setStatusCopy(message.trim());
+    });
+
+    const basePath = import.meta.env.BASE_URL.endsWith("/")
+      ? import.meta.env.BASE_URL
+      : `${import.meta.env.BASE_URL}/`;
+    const corePath = `${basePath}ffmpeg/ffmpeg-core.js`;
+    const wasmPath = `${basePath}ffmpeg/ffmpeg-core.wasm`;
+    const coreURL = import.meta.env.DEV
+      ? await toBlobURL(corePath, "text/javascript")
+      : corePath;
+    const wasmURL = import.meta.env.DEV
+      ? await toBlobURL(wasmPath, "application/wasm")
+      : wasmPath;
+
+    if (import.meta.env.DEV) coreBlobUrlsRef.current = [coreURL, wasmURL];
+
+    await ffmpeg.load({ coreURL, wasmURL });
+    engineModeRef.current = "single";
+    setEngineMode("single");
+    ffmpegRef.current = ffmpeg;
+    return ffmpeg;
+  };
+
+  const safeDelete = async (ffmpeg: FFmpeg, path: string) => {
+    try {
+      await ffmpeg.deleteFile(path);
+    } catch {
+      // Optional FFmpeg pass files may not exist for every input.
+    }
+  };
+
+  const compress = async () => {
+    if (!video || !bitratePlan || isProcessing) return;
+
+    isCancellingRef.current = false;
+    setError("");
+    resetResult();
+    setPhase("loading");
+    setProgress(2);
+    setStatusCopy("Starting the in-browser engine for this session");
+
+    let ffmpeg: FFmpeg | null = null;
+    const inputName = `input.${inputExtension(video.file.name)}`;
+    const outputName = "compressed.mp4";
+
+    const completeOutput = (buffer: ArrayBuffer) => {
+      const blob = new Blob([buffer], { type: "video/mp4" });
+      const fileName = `${safeFileStem(video.file.name)}-compressed.mp4`;
+      setResult({ url: URL.createObjectURL(blob), fileName, size: blob.size });
+      setProgress(100);
+      setStatusCopy("Compression complete");
+      setPhase("complete");
+    };
+
+    const hardwareAudioBitrate = Math.max(96, bitratePlan.audio);
+    const hardwareVideoBitrate = Math.max(
+      MIN_VIDEO_BITRATE_KBPS,
+      bitratePlan.total - hardwareAudioBitrate,
+    );
+
+    try {
+      let canUseHardware = false;
+      if (typeof VideoEncoder !== "undefined" && typeof AudioEncoder !== "undefined") {
+        try {
+          const [supportsVideo, supportsAudio] = await Promise.all([
+            canEncodeVideo("avc", {
+              width: video.width,
+              height: video.height,
+              bitrate: Math.round(
+                hardwareVideoBitrate * 1000 * HARDWARE_RATE_COMPENSATION,
+              ),
+              hardwareAcceleration: "prefer-hardware",
+            }),
+            canEncodeAudio("aac", {
+              bitrate: hardwareAudioBitrate * 1000,
+            }),
+          ]);
+          canUseHardware = supportsVideo && supportsAudio;
+        } catch {
+          canUseHardware = false;
+        }
+      }
+
+      if (canUseHardware) {
+        try {
+          const target = new BufferTarget();
+          const input = new Input({
+            source: new BlobSource(video.file),
+            formats: [MP4, QTFF, MATROSKA, WEBM],
+          });
+          const output = new Output({
+            format: new Mp4OutputFormat({ fastStart: "in-memory" }),
+            target,
+          });
+          const conversion = await Conversion.init({
+            input,
+            output,
+            tracks: "primary",
+            video: {
+              codec: "avc",
+              bitrate: Math.round(
+                hardwareVideoBitrate * 1000 * HARDWARE_RATE_COMPENSATION,
+              ),
+              hardwareAcceleration: "prefer-hardware",
+              forceTranscode: true,
+            },
+            audio: {
+              codec: "aac",
+              bitrate: hardwareAudioBitrate * 1000,
+              forceTranscode: true,
+            },
+            tags: {},
+            showWarnings: false,
+          });
+
+          if (!conversion.isValid) {
+            throw new Error("The browser hardware encoder does not support this video.");
+          }
+
+          conversionRef.current = conversion;
+          engineModeRef.current = "hardware";
+          setEngineMode("hardware");
+          setPhase("pass-two");
+          setStatusCopy("Encoding with browser hardware acceleration");
+          conversion.onProgress = (currentProgress) => {
+            setProgress(Math.round(8 + currentProgress * 89));
+          };
+          await conversion.execute();
+          conversionRef.current = null;
+
+          if (!target.buffer) throw new Error("The hardware encoder returned no video data.");
+          completeOutput(target.buffer);
+          return;
+        } catch (hardwareError) {
+          conversionRef.current = null;
+          if (isCancellingRef.current) {
+            throw hardwareError;
+          }
+          console.warn("Hardware encoding unavailable; using FFmpeg compatibility mode", hardwareError);
+          setProgress(2);
+          setStatusCopy("Hardware encoding unavailable. Loading compatibility mode.");
+        }
+      }
+
+      ffmpeg = await ensureFFmpeg();
+      setProgress(7);
+      setPhase("analyzing");
+      setStatusCopy("Copying the video into private browser memory");
+      await ffmpeg.writeFile(inputName, await fetchFile(video.file));
+
+      passRef.current = 1;
+      setPhase("pass-one");
+      setProgress(10);
+      setStatusCopy("Measuring motion and scene complexity");
+      const firstPassCode = await ffmpeg.exec([
+        "-i",
+        inputName,
+        "-c:v",
+        "libx264",
+        "-b:v",
+        `${bitratePlan.video}k`,
+        "-preset",
+        "fast",
+        "-pix_fmt",
+        "yuv420p",
+        "-pass",
+        "1",
+        "-passlogfile",
+        "passlog",
+        "-an",
+        "-f",
+        "null",
+        "/dev/null",
+      ]);
+      if (firstPassCode !== 0) throw new Error("The first encoding pass could not be completed.");
+
+      passRef.current = 2;
+      setPhase("pass-two");
+      setProgress(50);
+      setStatusCopy("Encoding video and audio");
+      const secondPassCode = await ffmpeg.exec([
+        "-i",
+        inputName,
+        "-c:v",
+        "libx264",
+        "-b:v",
+        `${bitratePlan.video}k`,
+        "-preset",
+        "fast",
+        "-pix_fmt",
+        "yuv420p",
+        "-pass",
+        "2",
+        "-passlogfile",
+        "passlog",
+        "-c:a",
+        "aac",
+        "-b:a",
+        `${bitratePlan.audio}k`,
+        "-movflags",
+        "+faststart",
+        "-map_metadata",
+        "-1",
+        outputName,
+      ]);
+      if (secondPassCode !== 0) throw new Error("The final encoding pass could not be completed.");
+
+      setPhase("finalizing");
+      setProgress(98);
+      setStatusCopy("Preparing your download");
+      const outputData = await ffmpeg.readFile(outputName);
+      if (typeof outputData === "string") throw new Error("The encoded video was not returned correctly.");
+      const bytes = Uint8Array.from(outputData);
+      completeOutput(bytes.buffer);
+    } catch (compressionError) {
+      if (isCancellingRef.current) {
+        setPhase("ready");
+        setProgress(0);
+        setStatusCopy("Compression cancelled");
+      } else {
+        console.error("Video compression failed", compressionError);
+        setError(
+          compressionError instanceof Error
+            ? compressionError.message
+            : "Compression failed. Try a smaller file or a different browser.",
+        );
+        setPhase("error");
+        setStatusCopy("");
+      }
+    } finally {
+      if (ffmpeg?.loaded) {
+        await Promise.all([
+          safeDelete(ffmpeg, inputName),
+          safeDelete(ffmpeg, outputName),
+          safeDelete(ffmpeg, "passlog-0.log"),
+          safeDelete(ffmpeg, "passlog-0.log.mbtree"),
+        ]);
+      }
+    }
+  };
+
+  const cancelCompression = () => {
+    if (!isProcessing) return;
+    isCancellingRef.current = true;
+    void conversionRef.current?.cancel();
+    conversionRef.current = null;
+    ffmpegRef.current?.terminate();
+    ffmpegRef.current = null;
+    coreBlobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    coreBlobUrlsRef.current = [];
+  };
+
+  const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+    void selectFile(event.dataTransfer.files[0]);
+  };
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <a className="brand" href="../../index.html" aria-label="Back to Web-Tools">
+          <span className="brand-mark" aria-hidden="true"><SlidersHorizontal weight="bold" /></span>
+          Web-Tools
+        </a>
+        <a className="back-link" href="../../index.html"><ArrowLeft /> All tools</a>
+        <span className="utility-note"><ShieldCheck weight="fill" /> Files stay on this device</span>
+      </header>
+
+      <div className="workspace">
+        <section className="intro-panel" aria-labelledby="page-title">
+          <p className="eyebrow">Video compressor</p>
+          <div className="hero-copy">
+            <h1 id="page-title">Make the file fit.</h1>
+            <p>Choose a target size. Hardware acceleration retains the original resolution while encoding locally.</p>
+          </div>
+          <p className="privacy-line"><ShieldCheck /> No upload, account, or server processing.</p>
+        </section>
+
+        <section className="tool-panel" aria-label="Video compression tool">
+          {!video ? (
+            <div
+              className={`drop-zone ${isDragging ? "drop-zone--active" : ""} ${isProcessing ? "drop-zone--disabled" : ""}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => inputRef.current?.click()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  inputRef.current?.click();
+                }
+              }}
+              onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={onDrop}
+            >
+              <input
+                ref={inputRef}
+                className="file-input"
+                type="file"
+                accept="video/*,.mkv"
+                onChange={(event) => void selectFile(event.target.files?.[0])}
+                disabled={isProcessing}
+                aria-label="Choose a video"
+              />
+              <span className="drop-icon" aria-hidden="true"><UploadSimple /></span>
+              <div className="upload-copy">
+                <h2>Drop a video here</h2>
+                <p>MP4, MOV, WebM, or MKV up to 2 GB</p>
+              </div>
+              <span className="browse-button">Choose video</span>
+            </div>
+          ) : (
+            <div className="file-stage">
+              <article className="preview-card">
+                <div className="video-frame">
+                  <video src={video.previewUrl} controls preload="metadata" aria-label={`Preview of ${video.file.name}`} />
+                </div>
+                <div className="media-details">
+                  <div>
+                    <p className="file-title" title={video.file.name}><FileVideo weight="fill" /> {video.file.name}</p>
+                    <p className="file-meta">{formatBytes(video.file.size)} · {formatDuration(video.duration)} · {video.width} × {video.height}</p>
+                  </div>
+                  <button className="remove-button" type="button" onClick={removeVideo} disabled={isProcessing} aria-label="Remove video"><X /></button>
+                </div>
+              </article>
+
+              <div className="controls-panel">
+                <div className="control-heading">
+                  <div>
+                    <p>Target output</p>
+                    <h2 className="size-readout">{targetSize.toFixed(1)} MB</h2>
+                  </div>
+                  <SlidersHorizontal aria-hidden="true" />
+                </div>
+
+                <div className="slider-wrap">
+                  <input
+                    className="target-slider"
+                    type="range"
+                    min={bounds.min}
+                    max={bounds.max}
+                    step="0.1"
+                    value={targetSize}
+                    onChange={(event) => { setTargetSize(Number(event.target.value)); resetResult(); setPhase("ready"); }}
+                    disabled={isProcessing}
+                    aria-label="Target file size in megabytes"
+                    aria-valuetext={`${targetSize.toFixed(1)} megabytes`}
+                  />
+                  <div className="range-labels"><span>{bounds.min.toFixed(1)} MB</span><span>{bounds.max.toFixed(1)} MB</span></div>
+                </div>
+
+                {bitratePlan && (
+                  <div className="estimate-grid">
+                    <div className="estimate-item"><Gauge /><div><span className="estimate-label">Target / source bitrate</span><strong className="estimate-value">{bitratePlan.total.toLocaleString()} / {bitratePlan.source.toLocaleString()} kbps</strong></div></div>
+                    <div className="estimate-item"><HardDrives /><div><span className="estimate-label">Estimated saving</span><strong className="estimate-value">{Math.max(0, Math.round((1 - targetSize * 1_000_000 / video.file.size) * 100))}%</strong></div></div>
+                  </div>
+                )}
+
+                <p className="notice">Resolution is retained. Hardware encoding is preferred for speed, with two-pass FFmpeg available as a compatibility fallback.</p>
+
+                <div className="action-row">
+                  <button className="primary-button" type="button" onClick={() => void compress()} disabled={isProcessing || bounds.min === bounds.max}>
+                    <SlidersHorizontal /> Compress video
+                  </button>
+                  {isProcessing && <button className="secondary-button" type="button" onClick={cancelCompression}><X /> Cancel</button>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && <div className="validation-error" role="alert"><WarningCircle weight="fill" /><span>{error}</span></div>}
+
+          {isProcessing && (
+            <section className="progress-panel" aria-live="polite" aria-label="Compression progress">
+              <div className="progress-heading"><span>{phaseLabel(phase)}</span><strong>{progress}%</strong></div>
+              <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span className="progress-fill" style={{ transform: `scaleX(${progress / 100})` }} /></div>
+              <p className="progress-meta">{engineMode === "hardware" ? "Hardware acceleration is active." : engineMode === "single" ? "Compatibility mode is active." : "Selecting the fastest supported engine."} Keep this tab open.</p>
+            </section>
+          )}
+
+          {phase === "complete" && result && (
+            <section className="result-panel" aria-live="polite">
+              <div className="result-summary"><CheckCircle weight="fill" /><div><h2>Ready to download</h2><p>{formatBytes(result.size)} output from {formatBytes(video?.file.size ?? 0)} source</p></div></div>
+              <div className="result-actions">
+                <a className="primary-button" href={result.url} download={result.fileName}><DownloadSimple /> Download MP4</a>
+                <button className="secondary-button" type="button" onClick={() => { resetResult(); setPhase("ready"); }}>Adjust target</button>
+              </div>
+            </section>
+          )}
+
+          {statusCopy && !isProcessing && phase !== "complete" && <p className="status-copy" aria-live="polite">{statusCopy}</p>}
+        </section>
+      </div>
+
+      <footer className="footer-note">
+        <span>H.264 MP4 output</span>
+        <span>Hardware accelerated</span>
+        <span>FFmpeg compatibility fallback</span>
+      </footer>
+    </main>
+  );
+}
