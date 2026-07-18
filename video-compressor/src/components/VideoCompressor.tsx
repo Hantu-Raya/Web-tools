@@ -14,6 +14,7 @@ import {
   Output,
   QTFF,
   WEBM,
+  WebMOutputFormat,
 } from "mediabunny";
 import {
   ArrowLeftIcon as ArrowLeft,
@@ -33,7 +34,8 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
 const MIN_VIDEO_BITRATE_KBPS = 150;
 const MIN_AUDIO_BITRATE_KBPS = 64;
 const CONTAINER_HEADROOM = 0.96;
-const HARDWARE_RATE_COMPENSATION = 1.06;
+const QUALITY_RATE_COMPENSATION = 0.83;
+const COMPATIBLE_RATE_COMPENSATION = 1.06;
 
 type Phase =
   | "empty"
@@ -44,6 +46,9 @@ type Phase =
   | "finalizing"
   | "complete"
   | "error";
+
+type CompressionProfile = "quality" | "compatible";
+type OutputKind = "mp4" | "webm";
 
 interface VideoDetails {
   duration: number;
@@ -59,8 +64,24 @@ interface SelectedVideo extends VideoDetails {
 interface CompressionResult {
   blob: Blob;
   fileName: string;
+  outputKind: OutputKind;
   size: number;
 }
+
+const OUTPUT_DETAILS = {
+  mp4: {
+    description: "MP4 video",
+    extension: ".mp4",
+    label: "MP4",
+    mimeType: "video/mp4",
+  },
+  webm: {
+    description: "WebM video",
+    extension: ".webm",
+    label: "WebM",
+    mimeType: "video/webm",
+  },
+} as const;
 
 interface WritableFileTarget {
   write(data: Blob): Promise<void>;
@@ -173,7 +194,7 @@ function phaseLabel(phase: Phase): string {
     case "pass-two":
       return "Encoding toward your target";
     case "finalizing":
-      return "Finalizing the MP4";
+      return "Finalizing the video";
     default:
       return "Working locally in your browser";
   }
@@ -186,16 +207,17 @@ export default function VideoCompressor() {
   const isCancellingRef = useRef(false);
   const coreBlobUrlsRef = useRef<string[]>([]);
   const conversionRef = useRef<Conversion | null>(null);
-  const engineModeRef = useRef<"hardware" | "single" | null>(null);
+  const engineModeRef = useRef<"native" | "single" | null>(null);
   const [video, setVideo] = useState<SelectedVideo | null>(null);
   const [targetSize, setTargetSize] = useState(0);
+  const [compressionProfile, setCompressionProfile] = useState<CompressionProfile>("quality");
   const [phase, setPhase] = useState<Phase>("empty");
   const [progress, setProgress] = useState(0);
   const [statusCopy, setStatusCopy] = useState("");
   const [error, setError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [result, setResult] = useState<CompressionResult | null>(null);
-  const [engineMode, setEngineMode] = useState<"hardware" | "single" | null>(null);
+  const [engineMode, setEngineMode] = useState<"native" | "single" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const isProcessing = [
@@ -248,11 +270,14 @@ export default function VideoCompressor() {
     try {
       const saveFilePicker = getSaveFilePicker();
       if (saveFilePicker) {
+        const outputDetails = OUTPUT_DETAILS[result.outputKind];
         const handle = await saveFilePicker({
           suggestedName: result.fileName,
           types: [{
-            description: "MP4 video",
-            accept: { "video/mp4": [".mp4"] },
+            description: outputDetails.description,
+            accept: {
+              [outputDetails.mimeType]: [outputDetails.extension],
+            },
           }],
         });
         const writable = await handle.createWritable();
@@ -262,7 +287,7 @@ export default function VideoCompressor() {
       }
 
       const outputFile = new File([result.blob], result.fileName, {
-        type: "video/mp4",
+        type: result.blob.type,
       });
       if (navigator.canShare?.({ files: [outputFile] })) {
         await navigator.share({
@@ -399,64 +424,79 @@ export default function VideoCompressor() {
     const inputName = `input.${inputExtension(video.file.name)}`;
     const outputName = "compressed.mp4";
 
-    const completeOutput = (buffer: ArrayBuffer) => {
-      const blob = new Blob([buffer], { type: "video/mp4" });
-      const fileName = `${safeFileStem(video.file.name)}-compressed.mp4`;
-      setResult({ blob, fileName, size: blob.size });
+    const completeOutput = (buffer: ArrayBuffer, outputKind: OutputKind) => {
+      const outputDetails = OUTPUT_DETAILS[outputKind];
+      const blob = new Blob([buffer], { type: outputDetails.mimeType });
+      const fileName = `${safeFileStem(video.file.name)}-compressed${outputDetails.extension}`;
+      setResult({ blob, fileName, outputKind, size: blob.size });
       setProgress(100);
       setStatusCopy("Compression complete");
       setPhase("complete");
     };
 
-    const hardwareAudioBitrate = Math.max(96, bitratePlan.audio);
-    const hardwareVideoBitrate = Math.max(
+    const browserAudioBitrate = Math.max(96, bitratePlan.audio);
+    const browserVideoBitrate = Math.max(
       MIN_VIDEO_BITRATE_KBPS,
-      bitratePlan.total - hardwareAudioBitrate,
+      bitratePlan.total - browserAudioBitrate,
     );
+    const preferredOutputKind: OutputKind =
+      compressionProfile === "quality" ? "webm" : "mp4";
+    const preferredVideoCodec: "vp9" | "avc" =
+      compressionProfile === "quality" ? "vp9" : "avc";
+    const rateCompensation =
+      compressionProfile === "quality"
+        ? QUALITY_RATE_COMPENSATION
+        : COMPATIBLE_RATE_COMPENSATION;
 
     try {
-      let canUseHardware = false;
+      let canUseNativeEncoder = false;
       let browserAudioCodec: "aac" | "opus" | null = null;
-      let browserAcceleration: "prefer-hardware" | "no-preference" = "prefer-hardware";
+      let browserAcceleration: "prefer-hardware" | "no-preference" =
+        compressionProfile === "quality" ? "no-preference" : "prefer-hardware";
+
       if (typeof VideoEncoder !== "undefined") {
         try {
-          canUseHardware = await canEncodeVideo("avc", {
+          canUseNativeEncoder = await canEncodeVideo(preferredVideoCodec, {
             width: video.width,
             height: video.height,
             bitrate: Math.round(
-              hardwareVideoBitrate * 1000 * HARDWARE_RATE_COMPENSATION,
+              browserVideoBitrate * 1000 * rateCompensation,
             ),
             hardwareAcceleration: browserAcceleration,
           });
-          if (!canUseHardware) {
+          if (!canUseNativeEncoder && browserAcceleration === "prefer-hardware") {
             browserAcceleration = "no-preference";
-            canUseHardware = await canEncodeVideo("avc", {
+            canUseNativeEncoder = await canEncodeVideo(preferredVideoCodec, {
               width: video.width,
               height: video.height,
               bitrate: Math.round(
-                hardwareVideoBitrate * 1000 * HARDWARE_RATE_COMPENSATION,
+                browserVideoBitrate * 1000 * rateCompensation,
               ),
               hardwareAcceleration: browserAcceleration,
             });
           }
+
           if (typeof AudioEncoder !== "undefined") {
-            if (await canEncodeAudio("aac", {
-              bitrate: hardwareAudioBitrate * 1000,
-            })) {
+            if (
+              compressionProfile === "compatible" &&
+              await canEncodeAudio("aac", {
+                bitrate: browserAudioBitrate * 1000,
+              })
+            ) {
               browserAudioCodec = "aac";
             } else if (await canEncodeAudio("opus", {
-              bitrate: hardwareAudioBitrate * 1000,
+              bitrate: browserAudioBitrate * 1000,
             })) {
               browserAudioCodec = "opus";
             }
           }
         } catch {
-          canUseHardware = false;
+          canUseNativeEncoder = false;
           browserAudioCodec = null;
         }
       }
 
-      if (canUseHardware && browserAudioCodec) {
+      if (canUseNativeEncoder && browserAudioCodec) {
         try {
           const target = new BufferTarget();
           const input = new Input({
@@ -464,7 +504,9 @@ export default function VideoCompressor() {
             formats: [MP4, QTFF, MATROSKA, WEBM],
           });
           const output = new Output({
-            format: new Mp4OutputFormat({ fastStart: "in-memory" }),
+            format: preferredOutputKind === "webm"
+              ? new WebMOutputFormat()
+              : new Mp4OutputFormat({ fastStart: "in-memory" }),
             target,
           });
           const conversion = await Conversion.init({
@@ -472,16 +514,17 @@ export default function VideoCompressor() {
             output,
             tracks: "primary",
             video: {
-              codec: "avc",
+              codec: preferredVideoCodec,
               bitrate: Math.round(
-                hardwareVideoBitrate * 1000 * HARDWARE_RATE_COMPENSATION,
+                browserVideoBitrate * 1000 * rateCompensation,
               ),
               hardwareAcceleration: browserAcceleration,
+              keyFrameInterval: compressionProfile === "quality" ? 4 : undefined,
               forceTranscode: true,
             },
             audio: {
               codec: browserAudioCodec,
-              bitrate: hardwareAudioBitrate * 1000,
+              bitrate: browserAudioBitrate * 1000,
               forceTranscode: true,
             },
             tags: {},
@@ -489,31 +532,40 @@ export default function VideoCompressor() {
           });
 
           if (!conversion.isValid) {
-            throw new Error("The browser hardware encoder does not support this video.");
+            throw new Error("The browser-native encoder does not support this profile.");
           }
 
           conversionRef.current = conversion;
-          engineModeRef.current = "hardware";
-          setEngineMode("hardware");
+          engineModeRef.current = "native";
+          setEngineMode("native");
           setPhase("pass-two");
-          setStatusCopy("Encoding with browser hardware acceleration");
+          setStatusCopy(
+            compressionProfile === "quality"
+              ? "Encoding quality-focused VP9 video"
+              : "Encoding compatible H.264 video",
+          );
           conversion.onProgress = (currentProgress) => {
             setProgress(Math.round(8 + currentProgress * 89));
           };
           await conversion.execute();
           conversionRef.current = null;
 
-          if (!target.buffer) throw new Error("The hardware encoder returned no video data.");
-          completeOutput(target.buffer);
+          if (!target.buffer) {
+            throw new Error("The browser-native encoder returned no video data.");
+          }
+          completeOutput(target.buffer, preferredOutputKind);
           return;
-        } catch (hardwareError) {
+        } catch (nativeError) {
           conversionRef.current = null;
           if (isCancellingRef.current) {
-            throw hardwareError;
+            throw nativeError;
           }
-          console.warn("Hardware encoding unavailable; using FFmpeg compatibility mode", hardwareError);
+          console.warn(
+            "Browser-native encoding unavailable; using FFmpeg compatibility mode",
+            nativeError,
+          );
           setProgress(2);
-          setStatusCopy("Hardware encoding unavailable. Loading compatibility mode.");
+          setStatusCopy("Quality profile unavailable. Loading MP4 compatibility mode.");
         }
       }
 
@@ -561,7 +613,7 @@ export default function VideoCompressor() {
       const outputData = await ffmpeg.readFile(outputName);
       if (typeof outputData === "string") throw new Error("The encoded video was not returned correctly.");
       const bytes = Uint8Array.from(outputData);
-      completeOutput(bytes.buffer);
+      completeOutput(bytes.buffer, "mp4");
     } catch (compressionError) {
       if (isCancellingRef.current) {
         setPhase("ready");
@@ -620,7 +672,7 @@ export default function VideoCompressor() {
           <p className="eyebrow">Video compressor</p>
           <div className="hero-copy">
             <h1 id="page-title">Make the file fit.</h1>
-            <p>Choose a target size. Hardware acceleration retains the original resolution while encoding locally.</p>
+            <p>Choose a target size and encoding priority. Resolution stays intact while the codec balances detail, size, and speed.</p>
           </div>
           <p className="privacy-line"><ShieldCheck /> No upload, account, or server processing.</p>
         </section>
@@ -699,6 +751,38 @@ export default function VideoCompressor() {
                   <div className="range-labels"><span>{bounds.min.toFixed(1)} MB</span><span>{bounds.max.toFixed(1)} MB</span></div>
                 </div>
 
+                <fieldset className="profile-fieldset" disabled={isProcessing}>
+                  <legend>Encoding priority</legend>
+                  <div className="profile-options">
+                    <button
+                      className={`profile-option ${compressionProfile === "quality" ? "profile-option--active" : ""}`}
+                      type="button"
+                      aria-pressed={compressionProfile === "quality"}
+                      onClick={() => {
+                        setCompressionProfile("quality");
+                        resetResult();
+                        setPhase("ready");
+                      }}
+                    >
+                      <strong>Best quality</strong>
+                      <span>VP9 · WebM</span>
+                    </button>
+                    <button
+                      className={`profile-option ${compressionProfile === "compatible" ? "profile-option--active" : ""}`}
+                      type="button"
+                      aria-pressed={compressionProfile === "compatible"}
+                      onClick={() => {
+                        setCompressionProfile("compatible");
+                        resetResult();
+                        setPhase("ready");
+                      }}
+                    >
+                      <strong>Compatible</strong>
+                      <span>H.264 · MP4</span>
+                    </button>
+                  </div>
+                </fieldset>
+
                 {bitratePlan && (
                   <div className="estimate-grid">
                     <div className="estimate-item"><Gauge /><div><span className="estimate-label">Target / source bitrate</span><strong className="estimate-value">{bitratePlan.total.toLocaleString()} / {bitratePlan.source.toLocaleString()} kbps</strong></div></div>
@@ -706,7 +790,11 @@ export default function VideoCompressor() {
                   </div>
                 )}
 
-                <p className="notice">Resolution is retained. Hardware encoding is preferred, with fast single-pass FFmpeg for Firefox and other compatibility browsers.</p>
+                <p className="notice">
+                  {compressionProfile === "quality"
+                    ? "VP9 preserves more visual detail at the same target size, but compression is slower. Output remains lossy, not identical to the source."
+                    : "H.264 prioritizes playback compatibility and speed. Lower target sizes necessarily reduce bitrate and visual quality."}
+                </p>
 
                 <div className="action-row">
                   <button className="primary-button" type="button" onClick={() => void compress()} disabled={isProcessing || bounds.min === bounds.max}>
@@ -724,15 +812,15 @@ export default function VideoCompressor() {
             <section className="progress-panel" aria-live="polite" aria-label="Compression progress">
               <div className="progress-heading"><span>{phaseLabel(phase)}</span><strong>{progress}%</strong></div>
               <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span className="progress-fill" style={{ transform: `scaleX(${progress / 100})` }} /></div>
-              <p className="progress-meta">{engineMode === "hardware" ? "Hardware acceleration is active." : engineMode === "single" ? "Fast compatibility mode is active." : "Selecting the fastest supported engine."} Keep this tab open.</p>
+              <p className="progress-meta">{engineMode === "native" ? "Browser-native quality encoding is active." : engineMode === "single" ? "Fast compatibility mode is active." : "Selecting the best supported encoder."} Keep this tab open.</p>
             </section>
           )}
 
           {phase === "complete" && result && (
             <section className="result-panel" aria-live="polite">
-              <div className="result-summary"><CheckCircle weight="fill" /><div><h2>Ready to download</h2><p>{formatBytes(result.size)} output from {formatBytes(video?.file.size ?? 0)} source</p></div></div>
+              <div className="result-summary"><CheckCircle weight="fill" /><div><h2>{OUTPUT_DETAILS[result.outputKind].label} ready</h2><p>{formatBytes(result.size)} output from {formatBytes(video?.file.size ?? 0)} source</p></div></div>
               <div className="result-actions">
-                <button className="primary-button" type="button" onClick={() => void saveResult()} disabled={isSaving}><DownloadSimple /> {isSaving ? "Saving…" : "Save MP4"}</button>
+                <button className="primary-button" type="button" onClick={() => void saveResult()} disabled={isSaving}><DownloadSimple /> {isSaving ? "Saving…" : `Save ${OUTPUT_DETAILS[result.outputKind].label}`}</button>
                 <button className="secondary-button" type="button" onClick={() => { resetResult(); setPhase("ready"); }}>Adjust target</button>
               </div>
             </section>
@@ -743,9 +831,9 @@ export default function VideoCompressor() {
       </div>
 
       <footer className="footer-note">
-        <span>H.264 MP4 output</span>
-        <span>Hardware accelerated</span>
-        <span>Fast Firefox fallback</span>
+        <span>Quality-first VP9 WebM</span>
+        <span>Compatible H.264 MP4</span>
+        <span>Browser-native encoding</span>
       </footer>
     </main>
   );
