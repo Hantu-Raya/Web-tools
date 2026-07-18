@@ -40,7 +40,6 @@ type Phase =
   | "ready"
   | "loading"
   | "analyzing"
-  | "pass-one"
   | "pass-two"
   | "finalizing"
   | "complete"
@@ -171,8 +170,6 @@ function phaseLabel(phase: Phase): string {
       return "Loading the local compression engine";
     case "analyzing":
       return "Preparing the video";
-    case "pass-one":
-      return "Analyzing motion and detail";
     case "pass-two":
       return "Encoding toward your target";
     case "finalizing":
@@ -186,7 +183,6 @@ function phaseLabel(phase: Phase): string {
 export default function VideoCompressor() {
   const inputRef = useRef<HTMLInputElement>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
-  const passRef = useRef<1 | 2>(1);
   const isCancellingRef = useRef(false);
   const coreBlobUrlsRef = useRef<string[]>([]);
   const conversionRef = useRef<Conversion | null>(null);
@@ -205,7 +201,6 @@ export default function VideoCompressor() {
   const isProcessing = [
     "loading",
     "analyzing",
-    "pass-one",
     "pass-two",
     "finalizing",
   ].includes(phase);
@@ -354,7 +349,7 @@ export default function VideoCompressor() {
     const ffmpeg = new FFmpeg();
     ffmpeg.on("progress", ({ progress: currentProgress }) => {
       const normalized = Math.max(0, Math.min(1, currentProgress));
-      const overall = passRef.current === 1 ? 10 + normalized * 40 : 50 + normalized * 47;
+      const overall = 10 + normalized * 87;
       setProgress(Math.round(overall));
     });
     ffmpeg.on("log", ({ message }) => {
@@ -421,28 +416,47 @@ export default function VideoCompressor() {
 
     try {
       let canUseHardware = false;
-      if (typeof VideoEncoder !== "undefined" && typeof AudioEncoder !== "undefined") {
+      let browserAudioCodec: "aac" | "opus" | null = null;
+      let browserAcceleration: "prefer-hardware" | "no-preference" = "prefer-hardware";
+      if (typeof VideoEncoder !== "undefined") {
         try {
-          const [supportsVideo, supportsAudio] = await Promise.all([
-            canEncodeVideo("avc", {
+          canUseHardware = await canEncodeVideo("avc", {
+            width: video.width,
+            height: video.height,
+            bitrate: Math.round(
+              hardwareVideoBitrate * 1000 * HARDWARE_RATE_COMPENSATION,
+            ),
+            hardwareAcceleration: browserAcceleration,
+          });
+          if (!canUseHardware) {
+            browserAcceleration = "no-preference";
+            canUseHardware = await canEncodeVideo("avc", {
               width: video.width,
               height: video.height,
               bitrate: Math.round(
                 hardwareVideoBitrate * 1000 * HARDWARE_RATE_COMPENSATION,
               ),
-              hardwareAcceleration: "prefer-hardware",
-            }),
-            canEncodeAudio("aac", {
+              hardwareAcceleration: browserAcceleration,
+            });
+          }
+          if (typeof AudioEncoder !== "undefined") {
+            if (await canEncodeAudio("aac", {
               bitrate: hardwareAudioBitrate * 1000,
-            }),
-          ]);
-          canUseHardware = supportsVideo && supportsAudio;
+            })) {
+              browserAudioCodec = "aac";
+            } else if (await canEncodeAudio("opus", {
+              bitrate: hardwareAudioBitrate * 1000,
+            })) {
+              browserAudioCodec = "opus";
+            }
+          }
         } catch {
           canUseHardware = false;
+          browserAudioCodec = null;
         }
       }
 
-      if (canUseHardware) {
+      if (canUseHardware && browserAudioCodec) {
         try {
           const target = new BufferTarget();
           const input = new Input({
@@ -462,11 +476,11 @@ export default function VideoCompressor() {
               bitrate: Math.round(
                 hardwareVideoBitrate * 1000 * HARDWARE_RATE_COMPENSATION,
               ),
-              hardwareAcceleration: "prefer-hardware",
+              hardwareAcceleration: browserAcceleration,
               forceTranscode: true,
             },
             audio: {
-              codec: "aac",
+              codec: browserAudioCodec,
               bitrate: hardwareAudioBitrate * 1000,
               forceTranscode: true,
             },
@@ -509,51 +523,26 @@ export default function VideoCompressor() {
       setStatusCopy("Copying the video into private browser memory");
       await ffmpeg.writeFile(inputName, await fetchFile(video.file));
 
-      passRef.current = 1;
-      setPhase("pass-one");
-      setProgress(10);
-      setStatusCopy("Measuring motion and scene complexity");
-      const firstPassCode = await ffmpeg.exec([
-        "-i",
-        inputName,
-        "-c:v",
-        "libx264",
-        "-b:v",
-        `${bitratePlan.video}k`,
-        "-preset",
-        "fast",
-        "-pix_fmt",
-        "yuv420p",
-        "-pass",
-        "1",
-        "-passlogfile",
-        "passlog",
-        "-an",
-        "-f",
-        "null",
-        "/dev/null",
-      ]);
-      if (firstPassCode !== 0) throw new Error("The first encoding pass could not be completed.");
-
-      passRef.current = 2;
       setPhase("pass-two");
-      setProgress(50);
-      setStatusCopy("Encoding video and audio");
-      const secondPassCode = await ffmpeg.exec([
+      setProgress(10);
+      setStatusCopy("Fast encoding video and audio");
+      const encodeCode = await ffmpeg.exec([
         "-i",
         inputName,
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a?",
         "-c:v",
         "libx264",
         "-b:v",
         `${bitratePlan.video}k`,
         "-preset",
-        "fast",
+        "ultrafast",
+        "-tune",
+        "fastdecode",
         "-pix_fmt",
         "yuv420p",
-        "-pass",
-        "2",
-        "-passlogfile",
-        "passlog",
         "-c:a",
         "aac",
         "-b:a",
@@ -564,7 +553,7 @@ export default function VideoCompressor() {
         "-1",
         outputName,
       ]);
-      if (secondPassCode !== 0) throw new Error("The final encoding pass could not be completed.");
+      if (encodeCode !== 0) throw new Error("The video encoding could not be completed.");
 
       setPhase("finalizing");
       setProgress(98);
@@ -593,8 +582,6 @@ export default function VideoCompressor() {
         await Promise.all([
           safeDelete(ffmpeg, inputName),
           safeDelete(ffmpeg, outputName),
-          safeDelete(ffmpeg, "passlog-0.log"),
-          safeDelete(ffmpeg, "passlog-0.log.mbtree"),
         ]);
       }
     }
@@ -719,7 +706,7 @@ export default function VideoCompressor() {
                   </div>
                 )}
 
-                <p className="notice">Resolution is retained. Hardware encoding is preferred for speed, with two-pass FFmpeg available as a compatibility fallback.</p>
+                <p className="notice">Resolution is retained. Hardware encoding is preferred, with fast single-pass FFmpeg for Firefox and other compatibility browsers.</p>
 
                 <div className="action-row">
                   <button className="primary-button" type="button" onClick={() => void compress()} disabled={isProcessing || bounds.min === bounds.max}>
@@ -737,7 +724,7 @@ export default function VideoCompressor() {
             <section className="progress-panel" aria-live="polite" aria-label="Compression progress">
               <div className="progress-heading"><span>{phaseLabel(phase)}</span><strong>{progress}%</strong></div>
               <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span className="progress-fill" style={{ transform: `scaleX(${progress / 100})` }} /></div>
-              <p className="progress-meta">{engineMode === "hardware" ? "Hardware acceleration is active." : engineMode === "single" ? "Compatibility mode is active." : "Selecting the fastest supported engine."} Keep this tab open.</p>
+              <p className="progress-meta">{engineMode === "hardware" ? "Hardware acceleration is active." : engineMode === "single" ? "Fast compatibility mode is active." : "Selecting the fastest supported engine."} Keep this tab open.</p>
             </section>
           )}
 
@@ -758,7 +745,7 @@ export default function VideoCompressor() {
       <footer className="footer-note">
         <span>H.264 MP4 output</span>
         <span>Hardware accelerated</span>
-        <span>FFmpeg compatibility fallback</span>
+        <span>Fast Firefox fallback</span>
       </footer>
     </main>
   );
