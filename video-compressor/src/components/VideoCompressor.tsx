@@ -58,10 +58,27 @@ interface SelectedVideo extends VideoDetails {
 }
 
 interface CompressionResult {
-  url: string;
+  blob: Blob;
   fileName: string;
   size: number;
 }
+
+interface WritableFileTarget {
+  write(data: Blob): Promise<void>;
+  close(): Promise<void>;
+}
+
+interface SaveFileHandle {
+  createWritable(): Promise<WritableFileTarget>;
+}
+
+type SaveFilePicker = (options: {
+  suggestedName: string;
+  types: Array<{
+    description: string;
+    accept: Record<string, string[]>;
+  }>;
+}) => Promise<SaveFileHandle>;
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) {
@@ -86,6 +103,13 @@ function safeFileStem(fileName: string): string {
 function inputExtension(fileName: string): string {
   const extension = fileName.split(".").pop()?.toLowerCase();
   return extension && /^[a-z0-9]{1,5}$/.test(extension) ? extension : "mp4";
+}
+
+function getSaveFilePicker(): SaveFilePicker | null {
+  const candidate = Reflect.get(window, "showSaveFilePicker");
+  return typeof candidate === "function"
+    ? (candidate.bind(window) as SaveFilePicker)
+    : null;
 }
 
 function readVideoDetails(file: File): Promise<VideoDetails> {
@@ -176,6 +200,7 @@ export default function VideoCompressor() {
   const [isDragging, setIsDragging] = useState(false);
   const [result, setResult] = useState<CompressionResult | null>(null);
   const [engineMode, setEngineMode] = useState<"hardware" | "single" | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const isProcessing = [
     "loading",
@@ -191,11 +216,6 @@ export default function VideoCompressor() {
     };
   }, [video]);
 
-  useEffect(() => {
-    return () => {
-      if (result?.url) URL.revokeObjectURL(result.url);
-    };
-  }, [result]);
 
   useEffect(() => {
     return () => {
@@ -222,6 +242,59 @@ export default function VideoCompressor() {
     setResult(null);
     setProgress(0);
     setStatusCopy("");
+  };
+
+  const saveResult = async () => {
+    if (!result || isSaving) return;
+
+    setError("");
+    setIsSaving(true);
+
+    try {
+      const saveFilePicker = getSaveFilePicker();
+      if (saveFilePicker) {
+        const handle = await saveFilePicker({
+          suggestedName: result.fileName,
+          types: [{
+            description: "MP4 video",
+            accept: { "video/mp4": [".mp4"] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(result.blob);
+        await writable.close();
+        return;
+      }
+
+      const outputFile = new File([result.blob], result.fileName, {
+        type: "video/mp4",
+      });
+      if (navigator.canShare?.({ files: [outputFile] })) {
+        await navigator.share({
+          files: [outputFile],
+          title: "Compressed video",
+        });
+        return;
+      }
+
+      const downloadUrl = URL.createObjectURL(result.blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = result.fileName;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 60_000);
+    } catch (saveError) {
+      if (saveError instanceof DOMException && saveError.name === "AbortError") {
+        return;
+      }
+
+      console.error("Video save failed", saveError);
+      setError("The video could not be saved. Try choosing a different folder.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const selectFile = async (file: File | undefined) => {
@@ -334,7 +407,7 @@ export default function VideoCompressor() {
     const completeOutput = (buffer: ArrayBuffer) => {
       const blob = new Blob([buffer], { type: "video/mp4" });
       const fileName = `${safeFileStem(video.file.name)}-compressed.mp4`;
-      setResult({ url: URL.createObjectURL(blob), fileName, size: blob.size });
+      setResult({ blob, fileName, size: blob.size });
       setProgress(100);
       setStatusCopy("Compression complete");
       setPhase("complete");
@@ -672,7 +745,7 @@ export default function VideoCompressor() {
             <section className="result-panel" aria-live="polite">
               <div className="result-summary"><CheckCircle weight="fill" /><div><h2>Ready to download</h2><p>{formatBytes(result.size)} output from {formatBytes(video?.file.size ?? 0)} source</p></div></div>
               <div className="result-actions">
-                <a className="primary-button" href={result.url} download={result.fileName}><DownloadSimple /> Download MP4</a>
+                <button className="primary-button" type="button" onClick={() => void saveResult()} disabled={isSaving}><DownloadSimple /> {isSaving ? "Saving…" : "Save MP4"}</button>
                 <button className="secondary-button" type="button" onClick={() => { resetResult(); setPhase("ready"); }}>Adjust target</button>
               </div>
             </section>
