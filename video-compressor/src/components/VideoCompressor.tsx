@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import {
@@ -33,6 +40,10 @@ import {
   CheckCircleIcon as CheckCircle,
   DownloadSimpleIcon as DownloadSimple,
   FileVideoIcon as FileVideo,
+  FastForwardIcon as FastForward,
+  PauseIcon as Pause,
+  PlayIcon as Play,
+  RewindIcon as Rewind,
   GaugeIcon as Gauge,
   PlusIcon as Plus,
   ScissorsIcon as Scissors,
@@ -127,6 +138,13 @@ function formatKeptDuration(seconds: number): string {
   return seconds < 60
     ? `${Number(seconds.toFixed(3))}s`
     : formatDuration(seconds);
+}
+
+function formatTimelineTime(seconds: number): string {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = (safeSeconds % 60).toFixed(1).padStart(4, "0");
+  return `${minutes}:${remainder}`;
 }
 
 function safeFileStem(fileName: string): string {
@@ -261,6 +279,8 @@ function phaseLabel(phase: Phase): string {
 
 export default function VideoCompressor() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLVideoElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
   const isCancellingRef = useRef(false);
   const coreBlobUrlsRef = useRef<string[]>([]);
@@ -280,6 +300,9 @@ export default function VideoCompressor() {
   const [result, setResult] = useState<CompressionResult | null>(null);
   const [engineMode, setEngineMode] = useState<"native" | "single" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeSegmentId, setActiveSegmentId] = useState<number | null>(null);
+  const [previewTime, setPreviewTime] = useState(0);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
 
   const isProcessing = [
     "loading",
@@ -307,6 +330,16 @@ export default function VideoCompressor() {
     () => keptDuration(segments),
     [segments],
   );
+  const activeSegment = useMemo(
+    () =>
+      segments.find((segment) => segment.id === activeSegmentId) ??
+      segments[0] ??
+      null,
+    [activeSegmentId, segments],
+  );
+  const activeSegmentIndex = activeSegment
+    ? segments.findIndex((segment) => segment.id === activeSegment.id)
+    : -1;
   const bounds = useMemo(
     () => video
       ? targetBounds(video, selectedDuration)
@@ -331,12 +364,139 @@ export default function VideoCompressor() {
     setStatusCopy("");
   };
 
+  const pausePreview = () => {
+    previewRef.current?.pause();
+  };
+
+  const seekPreview = (time: number) => {
+    if (!video) return;
+    const nextTime = Math.max(0, Math.min(video.duration, time));
+    if (previewRef.current) previewRef.current.currentTime = nextTime;
+    setPreviewTime(nextTime);
+  };
+
+  const togglePreviewPlayback = async () => {
+    const preview = previewRef.current;
+    if (!preview) return;
+    if (!preview.paused) {
+      preview.pause();
+      return;
+    }
+
+    try {
+      await preview.play();
+    } catch (playbackError) {
+      console.error("Video preview playback failed", playbackError);
+      setError("The video preview could not start playback.");
+    }
+  };
+
+  const skipPreview = (seconds: number) => {
+    seekPreview((previewRef.current?.currentTime ?? previewTime) + seconds);
+  };
+
+  const timelineTimeAt = (clientX: number): number | null => {
+    if (!video || !timelineRef.current) return null;
+    const bounds = timelineRef.current.getBoundingClientRect();
+    if (bounds.width <= 0) return null;
+    const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width));
+    return ratio * video.duration;
+  };
+
+  const scrubTimeline = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    shouldCapture: boolean,
+  ) => {
+    if (shouldCapture) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } else if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      return;
+    }
+    const time = timelineTimeAt(event.clientX);
+    if (time !== null) seekPreview(time);
+  };
+
+  const handleTimelineKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (!video) return;
+    const step = event.shiftKey ? 1 : 0.1;
+    const keyTargets: Record<string, number> = {
+      ArrowLeft: previewTime - step,
+      ArrowRight: previewTime + step,
+      End: video.duration,
+      Home: 0,
+    };
+    const nextTime = keyTargets[event.key];
+    if (nextTime === undefined) return;
+    event.preventDefault();
+    seekPreview(nextTime);
+  };
+
+  const dragSegmentBoundary = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    id: number,
+    boundary: "start" | "end",
+    shouldCapture: boolean,
+  ) => {
+    event.stopPropagation();
+    if (isProcessing) return;
+    if (shouldCapture) {
+      pausePreview();
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } else if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      return;
+    }
+
+    const time = timelineTimeAt(event.clientX);
+    if (time !== null) updateSegment(id, boundary, time);
+  };
+
+  const handleBoundaryKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    id: number,
+    boundary: "start" | "end",
+  ) => {
+    if (!video || isProcessing) return;
+    const index = segments.findIndex((segment) => segment.id === id);
+    if (index === -1) return;
+    const segment = segments[index];
+    const step = event.shiftKey ? 1 : 0.1;
+    const current = boundary === "start" ? segment.start : segment.end;
+    const minimum = boundary === "start"
+      ? index === 0 ? 0 : segments[index - 1].end
+      : segment.start + MIN_SEGMENT_DURATION;
+    const maximum = boundary === "start"
+      ? segment.end - MIN_SEGMENT_DURATION
+      : index === segments.length - 1
+        ? video.duration
+        : segments[index + 1].start;
+    const keyTargets: Record<string, number> = {
+      ArrowLeft: current - step,
+      ArrowRight: current + step,
+      End: maximum,
+      Home: minimum,
+    };
+    const nextTime = keyTargets[event.key];
+    if (nextTime === undefined) return;
+    event.preventDefault();
+    updateSegment(id, boundary, nextTime);
+  };
+
+  const selectSegment = (segment: SegmentRange) => {
+    setActiveSegmentId(segment.id);
+    seekPreview(segment.start);
+  };
+
+
   const updateSegment = (
     id: number,
     boundary: "start" | "end",
     rawValue: number,
   ) => {
     if (!video || !Number.isFinite(rawValue)) return;
+    setActiveSegmentId(id);
+    seekPreview(rawValue);
 
     setSegments((current) =>
       updateSegmentBoundary(
@@ -361,8 +521,12 @@ export default function VideoCompressor() {
       return;
     }
 
+    const addedId = nextSegmentIdRef.current;
     nextSegmentIdRef.current += 1;
     setSegments(next);
+    setActiveSegmentId(addedId);
+    const addedSegment = next.find((segment) => segment.id === addedId);
+    if (addedSegment) seekPreview(addedSegment.start);
     setError("");
     resetResult();
     setPhase("ready");
@@ -370,7 +534,14 @@ export default function VideoCompressor() {
 
   const removeSegment = (id: number) => {
     if (segments.length === 1) return;
-    setSegments((current) => current.filter((segment) => segment.id !== id));
+    const removedIndex = segments.findIndex((segment) => segment.id === id);
+    const next = segments.filter((segment) => segment.id !== id);
+    setSegments(next);
+    if (activeSegmentId === id) {
+      const replacement = next[Math.min(removedIndex, next.length - 1)];
+      setActiveSegmentId(replacement.id);
+      seekPreview(replacement.start);
+    }
     setError("");
     resetResult();
     setPhase("ready");
@@ -465,6 +636,9 @@ export default function VideoCompressor() {
       nextSegmentIdRef.current = 2;
       setVideo(selected);
       setSegments(nextSegments);
+      setActiveSegmentId(nextSegments[0].id);
+      setPreviewTime(0);
+      setIsPreviewPlaying(false);
       setTargetSize(Number(((nextBounds.min + nextBounds.max) / 2).toFixed(1)));
       setPhase("ready");
       setStatusCopy("");
@@ -482,6 +656,9 @@ export default function VideoCompressor() {
     setVideo(null);
     setSegments([]);
     setTargetSize(0);
+    setActiveSegmentId(null);
+    setPreviewTime(0);
+    setIsPreviewPlaying(false);
     setError("");
     resetResult();
     setPhase("empty");
@@ -986,7 +1163,155 @@ export default function VideoCompressor() {
             <div className="file-stage">
               <article className="preview-card">
                 <div className="video-frame">
-                  <video src={video.previewUrl} controls preload="metadata" aria-label={`Preview of ${video.file.name}`} />
+                  <div className="video-canvas">
+                    <video
+                      ref={previewRef}
+                      src={video.previewUrl}
+                      preload="metadata"
+                      playsInline
+                      onClick={() => void togglePreviewPlayback()}
+                      onTimeUpdate={(event) => setPreviewTime(event.currentTarget.currentTime)}
+                      onLoadedMetadata={(event) => setPreviewTime(event.currentTarget.currentTime)}
+                      onPlay={() => setIsPreviewPlaying(true)}
+                      onPause={() => setIsPreviewPlaying(false)}
+                      onEnded={() => setIsPreviewPlaying(false)}
+                      aria-label={`Preview of ${video.file.name}`}
+                    />
+                  </div>
+                  <section className="timeline-editor" aria-label="Video trimming timeline">
+                    <div
+                      ref={timelineRef}
+                      className="timeline-track"
+                      role="group"
+                      tabIndex={0}
+                      aria-label={`Video timeline, ${formatTimelineTime(previewTime)} of ${formatTimelineTime(video.duration)}`}
+                      onPointerDown={(event) => scrubTimeline(event, true)}
+                      onPointerMove={(event) => scrubTimeline(event, false)}
+                      onPointerUp={(event) => {
+                        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                          event.currentTarget.releasePointerCapture(event.pointerId);
+                        }
+                      }}
+                      onKeyDown={handleTimelineKeyDown}
+                    >
+                      {segments.map((segment, index) => (
+                        <button
+                          className={`timeline-segment ${segment.id === activeSegment?.id ? "timeline-segment--active" : ""}`}
+                          key={segment.id}
+                          type="button"
+                          style={{
+                            left: `${(segment.start / video.duration) * 100}%`,
+                            width: `${(segmentDuration(segment) / video.duration) * 100}%`,
+                          }}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            setActiveSegmentId(segment.id);
+                            const time = timelineTimeAt(event.clientX);
+                            if (time !== null) seekPreview(time);
+                          }}
+                          onClick={(event) => {
+                            if (event.detail === 0) selectSegment(segment);
+                          }}
+                          aria-label={`Edit segment ${index + 1}, ${formatTimelineTime(segment.start)} to ${formatTimelineTime(segment.end)}`}
+                          aria-pressed={segment.id === activeSegment?.id}
+                        />
+                      ))}
+                      {activeSegment && activeSegmentIndex >= 0 && (
+                        <>
+                          <button
+                            className="timeline-handle timeline-handle--start"
+                            type="button"
+                            role="slider"
+                            style={{ left: `${(activeSegment.start / video.duration) * 100}%` }}
+                            onPointerDown={(event) =>
+                              dragSegmentBoundary(event, activeSegment.id, "start", true)}
+                            onPointerMove={(event) =>
+                              dragSegmentBoundary(event, activeSegment.id, "start", false)}
+                            onPointerUp={(event) => {
+                              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                                event.currentTarget.releasePointerCapture(event.pointerId);
+                              }
+                            }}
+                            onKeyDown={(event) =>
+                              handleBoundaryKeyDown(event, activeSegment.id, "start")}
+                            disabled={isProcessing}
+                            aria-label={`Segment ${activeSegmentIndex + 1} start`}
+                            aria-valuemin={activeSegmentIndex === 0 ? 0 : segments[activeSegmentIndex - 1].end}
+                            aria-valuemax={activeSegment.end - MIN_SEGMENT_DURATION}
+                            aria-valuenow={activeSegment.start}
+                            aria-valuetext={formatTimelineTime(activeSegment.start)}
+                          />
+                          <button
+                            className="timeline-handle timeline-handle--end"
+                            type="button"
+                            role="slider"
+                            style={{ left: `${(activeSegment.end / video.duration) * 100}%` }}
+                            onPointerDown={(event) =>
+                              dragSegmentBoundary(event, activeSegment.id, "end", true)}
+                            onPointerMove={(event) =>
+                              dragSegmentBoundary(event, activeSegment.id, "end", false)}
+                            onPointerUp={(event) => {
+                              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                                event.currentTarget.releasePointerCapture(event.pointerId);
+                              }
+                            }}
+                            onKeyDown={(event) =>
+                              handleBoundaryKeyDown(event, activeSegment.id, "end")}
+                            disabled={isProcessing}
+                            aria-label={`Segment ${activeSegmentIndex + 1} end`}
+                            aria-valuemin={activeSegment.start + MIN_SEGMENT_DURATION}
+                            aria-valuemax={activeSegmentIndex === segments.length - 1
+                              ? video.duration
+                              : segments[activeSegmentIndex + 1].start}
+                            aria-valuenow={activeSegment.end}
+                            aria-valuetext={formatTimelineTime(activeSegment.end)}
+                          />
+                        </>
+                      )}
+                      <span
+                        className="timeline-playhead"
+                        style={{ left: `${(previewTime / video.duration) * 100}%` }}
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div className="timeline-toolbar">
+                      <span className="timeline-active-label">
+                        Editing segment {activeSegmentIndex + 1}
+                      </span>
+                      <div className="timeline-transport">
+                        <button
+                          className="transport-button"
+                          type="button"
+                          onClick={() => skipPreview(-5)}
+                          aria-label="Skip preview back 5 seconds"
+                        >
+                          <Rewind />
+                        </button>
+                        <button
+                          className="transport-button transport-button--primary"
+                          type="button"
+                          onClick={() => void togglePreviewPlayback()}
+                          aria-label={isPreviewPlaying ? "Pause preview" : "Play preview"}
+                        >
+                          {isPreviewPlaying ? <Pause weight="fill" /> : <Play weight="fill" />}
+                        </button>
+                        <button
+                          className="transport-button"
+                          type="button"
+                          onClick={() => skipPreview(5)}
+                          aria-label="Skip preview forward 5 seconds"
+                        >
+                          <FastForward />
+                        </button>
+                      </div>
+                      <span className="timeline-time">
+                        {formatTimelineTime(previewTime)} / {formatTimelineTime(video.duration)}
+                      </span>
+                    </div>
+                    <p className="timeline-instruction">
+                      Click to seek. Drag the active segment handles to set its start and end.
+                    </p>
+                  </section>
                 </div>
                 <div className="media-details">
                   <div>
@@ -1046,13 +1371,23 @@ export default function VideoCompressor() {
                         index === segments.length - 1
                           ? video.duration
                           : segments[index + 1].start;
-                      const left = (segment.start / video.duration) * 100;
-                      const width =
-                        (segmentDuration(segment) / video.duration) * 100;
 
                       return (
-                        <fieldset className="segment-card" key={segment.id}>
-                          <legend>Segment {index + 1}</legend>
+                        <fieldset
+                          className={`segment-card ${segment.id === activeSegment?.id ? "segment-card--active" : ""}`}
+                          key={segment.id}
+                        >
+                          <legend>
+                            <button
+                              className="segment-select-button"
+                              type="button"
+                              onClick={() => selectSegment(segment)}
+                              aria-pressed={segment.id === activeSegment?.id}
+                            >
+                              Segment {index + 1}
+                              {segment.id === activeSegment?.id && <span>Editing</span>}
+                            </button>
+                          </legend>
                           <button
                             className="segment-remove-button"
                             type="button"
@@ -1062,9 +1397,6 @@ export default function VideoCompressor() {
                           >
                             <Trash />
                           </button>
-                          <div className="segment-track" aria-hidden="true">
-                            <span style={{ left: `${left}%`, width: `${width}%` }} />
-                          </div>
                           <div className="segment-time-grid">
                             <label>
                               <span>Start</span>
