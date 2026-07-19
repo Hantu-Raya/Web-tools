@@ -14,7 +14,6 @@ import {
   Output,
   QTFF,
   WEBM,
-  WebMOutputFormat,
 } from "mediabunny";
 import {
   ArrowLeftIcon as ArrowLeft,
@@ -48,7 +47,6 @@ type Phase =
   | "error";
 
 type CompressionProfile = "quality" | "compatible";
-type OutputKind = "mp4" | "webm";
 
 interface VideoDetails {
   duration: number;
@@ -64,23 +62,14 @@ interface SelectedVideo extends VideoDetails {
 interface CompressionResult {
   blob: Blob;
   fileName: string;
-  outputKind: OutputKind;
   size: number;
 }
 
 const OUTPUT_DETAILS = {
-  mp4: {
-    description: "MP4 video",
-    extension: ".mp4",
-    label: "MP4",
-    mimeType: "video/mp4",
-  },
-  webm: {
-    description: "WebM video",
-    extension: ".webm",
-    label: "WebM",
-    mimeType: "video/webm",
-  },
+  description: "MP4 video",
+  extension: ".mp4",
+  label: "MP4",
+  mimeType: "video/mp4",
 } as const;
 
 interface WritableFileTarget {
@@ -270,7 +259,7 @@ export default function VideoCompressor() {
     try {
       const saveFilePicker = getSaveFilePicker();
       if (saveFilePicker) {
-        const outputDetails = OUTPUT_DETAILS[result.outputKind];
+        const outputDetails = OUTPUT_DETAILS;
         const handle = await saveFilePicker({
           suggestedName: result.fileName,
           types: [{
@@ -424,11 +413,10 @@ export default function VideoCompressor() {
     const inputName = `input.${inputExtension(video.file.name)}`;
     const outputName = "compressed.mp4";
 
-    const completeOutput = (buffer: ArrayBuffer, outputKind: OutputKind) => {
-      const outputDetails = OUTPUT_DETAILS[outputKind];
-      const blob = new Blob([buffer], { type: outputDetails.mimeType });
-      const fileName = `${safeFileStem(video.file.name)}-compressed${outputDetails.extension}`;
-      setResult({ blob, fileName, outputKind, size: blob.size });
+    const completeOutput = (buffer: ArrayBuffer) => {
+      const blob = new Blob([buffer], { type: OUTPUT_DETAILS.mimeType });
+      const fileName = `${safeFileStem(video.file.name)}-compressed${OUTPUT_DETAILS.extension}`;
+      setResult({ blob, fileName, size: blob.size });
       setProgress(100);
       setStatusCopy("Compression complete");
       setPhase("complete");
@@ -439,8 +427,6 @@ export default function VideoCompressor() {
       MIN_VIDEO_BITRATE_KBPS,
       bitratePlan.total - browserAudioBitrate,
     );
-    const preferredOutputKind: OutputKind =
-      compressionProfile === "quality" ? "webm" : "mp4";
     const preferredVideoCodec: "vp9" | "avc" =
       compressionProfile === "quality" ? "vp9" : "avc";
     const rateCompensation =
@@ -504,9 +490,7 @@ export default function VideoCompressor() {
             formats: [MP4, QTFF, MATROSKA, WEBM],
           });
           const output = new Output({
-            format: preferredOutputKind === "webm"
-              ? new WebMOutputFormat()
-              : new Mp4OutputFormat({ fastStart: "in-memory" }),
+            format: new Mp4OutputFormat({ fastStart: "in-memory" }),
             target,
           });
           const conversion = await Conversion.init({
@@ -553,7 +537,7 @@ export default function VideoCompressor() {
           if (!target.buffer) {
             throw new Error("The browser-native encoder returned no video data.");
           }
-          completeOutput(target.buffer, preferredOutputKind);
+          completeOutput(target.buffer);
           return;
         } catch (nativeError) {
           conversionRef.current = null;
@@ -613,7 +597,7 @@ export default function VideoCompressor() {
       const outputData = await ffmpeg.readFile(outputName);
       if (typeof outputData === "string") throw new Error("The encoded video was not returned correctly.");
       const bytes = Uint8Array.from(outputData);
-      completeOutput(bytes.buffer, "mp4");
+      completeOutput(bytes.buffer);
     } catch (compressionError) {
       if (isCancellingRef.current) {
         setPhase("ready");
@@ -765,7 +749,7 @@ export default function VideoCompressor() {
                       }}
                     >
                       <strong>Best quality</strong>
-                      <span>VP9 · WebM</span>
+                      <span>VP9 · MP4</span>
                     </button>
                     <button
                       className={`profile-option ${compressionProfile === "compatible" ? "profile-option--active" : ""}`}
@@ -792,7 +776,7 @@ export default function VideoCompressor() {
 
                 <p className="notice">
                   {compressionProfile === "quality"
-                    ? "VP9 preserves more visual detail at the same target size, but compression is slower. Output remains lossy, not identical to the source."
+                    ? "VP9 in MP4 preserves more visual detail at the same target size, but some older players may not support it. Output remains lossy."
                     : "H.264 prioritizes playback compatibility and speed. Lower target sizes necessarily reduce bitrate and visual quality."}
                 </p>
 
@@ -818,9 +802,9 @@ export default function VideoCompressor() {
 
           {phase === "complete" && result && (
             <section className="result-panel" aria-live="polite">
-              <div className="result-summary"><CheckCircle weight="fill" /><div><h2>{OUTPUT_DETAILS[result.outputKind].label} ready</h2><p>{formatBytes(result.size)} output from {formatBytes(video?.file.size ?? 0)} source</p></div></div>
+              <div className="result-summary"><CheckCircle weight="fill" /><div><h2>{OUTPUT_DETAILS.label} ready</h2><p>{formatBytes(result.size)} output from {formatBytes(video?.file.size ?? 0)} source</p></div></div>
               <div className="result-actions">
-                <button className="primary-button" type="button" onClick={() => void saveResult()} disabled={isSaving}><DownloadSimple /> {isSaving ? "Saving…" : `Save ${OUTPUT_DETAILS[result.outputKind].label}`}</button>
+                <button className="primary-button" type="button" onClick={() => void saveResult()} disabled={isSaving}><DownloadSimple /> {isSaving ? "Saving…" : `Save ${OUTPUT_DETAILS.label}`}</button>
                 <button className="secondary-button" type="button" onClick={() => { resetResult(); setPhase("ready"); }}>Adjust target</button>
               </div>
             </section>
@@ -831,7 +815,7 @@ export default function VideoCompressor() {
       </div>
 
       <footer className="footer-note">
-        <span>Quality-first VP9 WebM</span>
+        <span>Quality-first VP9 MP4</span>
         <span>Compatible H.264 MP4</span>
         <span>Browser-native encoding</span>
       </footer>
