@@ -16,16 +16,32 @@ import {
   WEBM,
 } from "mediabunny";
 import {
+  buildSegmentFilter,
+  createAudioSegmentProcessor,
+  initialSegments,
+  keptDuration,
+  MAX_SEGMENTS,
+  MIN_SEGMENT_DURATION,
+  remapVideoSample,
+  segmentDuration,
+  splitLongestSegment,
+  type SegmentRange,
+  updateSegmentBoundary,
+} from "../lib/segmentPipeline";
+import {
   ArrowLeftIcon as ArrowLeft,
   CheckCircleIcon as CheckCircle,
   DownloadSimpleIcon as DownloadSimple,
   FileVideoIcon as FileVideo,
   GaugeIcon as Gauge,
+  PlusIcon as Plus,
+  ScissorsIcon as Scissors,
   HardDrivesIcon as HardDrives,
   ShieldCheckIcon as ShieldCheck,
   SlidersHorizontalIcon as SlidersHorizontal,
   UploadSimpleIcon as UploadSimple,
   WarningCircleIcon as WarningCircle,
+  TrashIcon as Trash,
   XIcon as X,
 } from "@phosphor-icons/react";
 
@@ -53,6 +69,7 @@ interface VideoDetails {
   duration: number;
   width: number;
   height: number;
+  hasAudio: boolean;
 }
 
 interface SelectedVideo extends VideoDetails {
@@ -65,6 +82,7 @@ interface CompressionResult {
   fileName: string;
   size: number;
 }
+
 
 const OUTPUT_DETAILS = {
   description: "MP4 video",
@@ -105,6 +123,12 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }
 
+function formatKeptDuration(seconds: number): string {
+  return seconds < 60
+    ? `${Number(seconds.toFixed(3))}s`
+    : formatDuration(seconds);
+}
+
 function safeFileStem(fileName: string): string {
   const stem = fileName.replace(/\.[^/.]+$/, "");
   return stem.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "video";
@@ -113,6 +137,15 @@ function safeFileStem(fileName: string): string {
 function inputExtension(fileName: string): string {
   const extension = fileName.split(".").pop()?.toLowerCase();
   return extension && /^[a-z0-9]{1,5}$/.test(extension) ? extension : "mp4";
+}
+
+
+async function detectAudioTrack(file: File): Promise<boolean> {
+  const input = new Input({
+    source: new BlobSource(file),
+    formats: [MP4, QTFF, MATROSKA, WEBM],
+  });
+  return await input.getPrimaryAudioTrack() !== null;
 }
 
 function getSaveFilePicker(): SaveFilePicker | null {
@@ -147,7 +180,9 @@ function readVideoDetails(file: File): Promise<VideoDetails> {
       return;
     }
 
-    resolve(details);
+    void detectAudioTrack(file)
+      .then((hasAudio) => resolve({ ...details, hasAudio }))
+      .catch(() => reject(new Error("The video tracks could not be analyzed.")));
   };
   video.onerror = () => {
     cleanUp();
@@ -158,10 +193,17 @@ function readVideoDetails(file: File): Promise<VideoDetails> {
   return promise;
 }
 
-function targetBounds(video: SelectedVideo): { min: number; max: number } {
-  const sourceMegabytes = video.file.size / 1_000_000;
+function targetBounds(
+  video: SelectedVideo,
+  outputDuration: number,
+): { min: number; max: number } {
+  const sourceMegabytes =
+    (video.file.size / 1_000_000) * (outputDuration / video.duration);
   const codecFloor =
-    (video.duration * (MIN_VIDEO_BITRATE_KBPS + MIN_AUDIO_BITRATE_KBPS)) /
+    (outputDuration * (
+      MIN_VIDEO_BITRATE_KBPS +
+      (video.hasAudio ? MIN_AUDIO_BITRATE_KBPS : 0)
+    )) /
     8000 /
     CONTAINER_HEADROOM;
   const max = Math.max(0.2, sourceMegabytes * 0.95);
@@ -173,6 +215,32 @@ function chooseAudioBitrate(totalBitrate: number): number {
   if (totalBitrate >= 1200) return 128;
   if (totalBitrate >= 500) return 96;
   return MIN_AUDIO_BITRATE_KBPS;
+}
+
+interface BitratePlan {
+  audio: number;
+  source: number;
+  total: number;
+  video: number;
+}
+
+function planBitrate(
+  video: SelectedVideo,
+  targetSize: number,
+  outputDuration: number,
+): BitratePlan | null {
+  if (targetSize <= 0 || outputDuration <= 0) return null;
+
+  const total = Math.floor(
+    (targetSize * 8000 * CONTAINER_HEADROOM) / outputDuration,
+  );
+  const audio = video.hasAudio ? chooseAudioBitrate(total) : 0;
+  return {
+    audio,
+    source: Math.round((video.file.size * 8) / video.duration / 1000),
+    total,
+    video: Math.max(MIN_VIDEO_BITRATE_KBPS, total - audio),
+  };
 }
 
 function phaseLabel(phase: Phase): string {
@@ -199,7 +267,9 @@ export default function VideoCompressor() {
   const conversionRef = useRef<Conversion | null>(null);
   const engineModeRef = useRef<"native" | "single" | null>(null);
   const ffmpegPassRef = useRef<1 | 2>(1);
+  const nextSegmentIdRef = useRef(2);
   const [video, setVideo] = useState<SelectedVideo | null>(null);
+  const [segments, setSegments] = useState<SegmentRange[]>([]);
   const [targetSize, setTargetSize] = useState(0);
   const [compressionProfile, setCompressionProfile] = useState<CompressionProfile>("quality");
   const [phase, setPhase] = useState<Phase>("empty");
@@ -233,23 +303,77 @@ export default function VideoCompressor() {
     };
   }, []);
 
-  const bounds = useMemo(() => (video ? targetBounds(video) : { min: 0.2, max: 1 }), [video]);
-  const bitratePlan = useMemo(() => {
-    if (!video || targetSize <= 0) return null;
-    const total = Math.floor((targetSize * 8000 * CONTAINER_HEADROOM) / video.duration);
-    const audio = chooseAudioBitrate(total);
-    return {
-      audio,
-      total,
-      video: Math.max(MIN_VIDEO_BITRATE_KBPS, total - audio),
-      source: Math.round((video.file.size * 8) / video.duration / 1000),
-    };
-  }, [targetSize, video]);
+  const selectedDuration = useMemo(
+    () => keptDuration(segments),
+    [segments],
+  );
+  const bounds = useMemo(
+    () => video
+      ? targetBounds(video, selectedDuration)
+      : { min: 0.2, max: 1 },
+    [selectedDuration, video],
+  );
+  const bitratePlan = useMemo(
+    () => video ? planBitrate(video, targetSize, selectedDuration) : null,
+    [selectedDuration, targetSize, video],
+  );
+  useEffect(() => {
+    if (!video) return;
+    setTargetSize((current) => {
+      const clamped = Math.min(bounds.max, Math.max(bounds.min, current));
+      return Number(clamped.toFixed(1));
+    });
+  }, [bounds, video]);
 
   const resetResult = () => {
     setResult(null);
     setProgress(0);
     setStatusCopy("");
+  };
+
+  const updateSegment = (
+    id: number,
+    boundary: "start" | "end",
+    rawValue: number,
+  ) => {
+    if (!video || !Number.isFinite(rawValue)) return;
+
+    setSegments((current) =>
+      updateSegmentBoundary(
+        current,
+        id,
+        boundary,
+        rawValue,
+        video.duration,
+      )
+    );
+    setError("");
+    resetResult();
+    setPhase("ready");
+  };
+
+  const addSegment = () => {
+    if (!video || segments.length >= MAX_SEGMENTS) return;
+
+    const next = splitLongestSegment(segments, nextSegmentIdRef.current);
+    if (!next) {
+      setError("No selected range is long enough to split into another segment.");
+      return;
+    }
+
+    nextSegmentIdRef.current += 1;
+    setSegments(next);
+    setError("");
+    resetResult();
+    setPhase("ready");
+  };
+
+  const removeSegment = (id: number) => {
+    if (segments.length === 1) return;
+    setSegments((current) => current.filter((segment) => segment.id !== id));
+    setError("");
+    resetResult();
+    setPhase("ready");
   };
 
   const saveResult = async () => {
@@ -336,8 +460,11 @@ export default function VideoCompressor() {
         ...details,
         previewUrl: URL.createObjectURL(file),
       };
-      const nextBounds = targetBounds(selected);
+      const nextSegments = initialSegments(selected.duration);
+      const nextBounds = targetBounds(selected, selected.duration);
+      nextSegmentIdRef.current = 2;
       setVideo(selected);
+      setSegments(nextSegments);
       setTargetSize(Number(((nextBounds.min + nextBounds.max) / 2).toFixed(1)));
       setPhase("ready");
       setStatusCopy("");
@@ -353,6 +480,7 @@ export default function VideoCompressor() {
   const removeVideo = () => {
     if (isProcessing) return;
     setVideo(null);
+    setSegments([]);
     setTargetSize(0);
     setError("");
     resetResult();
@@ -404,7 +532,13 @@ export default function VideoCompressor() {
   };
 
   const compress = async () => {
-    if (!video || !bitratePlan || isProcessing) return;
+    if (
+      !video ||
+      !bitratePlan ||
+      selectedDuration <= 0 ||
+      segments.length === 0 ||
+      isProcessing
+    ) return;
 
     isCancellingRef.current = false;
     setError("");
@@ -416,6 +550,19 @@ export default function VideoCompressor() {
     let ffmpeg: FFmpeg | null = null;
     const inputName = `input.${inputExtension(video.file.name)}`;
     const outputName = "compressed.mp4";
+    const selectedSegments = segments.map((segment) => ({ ...segment }));
+    const segmentEnvelopeStart = selectedSegments[0].start;
+    const segmentEnvelopeEnd = selectedSegments[selectedSegments.length - 1].end;
+    const nativeSegments = selectedSegments.map((segment) => ({
+      ...segment,
+      start: segment.start - segmentEnvelopeStart,
+      end: segment.end - segmentEnvelopeStart,
+    }));
+    const videoSegmentFilter = buildSegmentFilter(selectedSegments, false);
+    const mediaSegmentFilter = buildSegmentFilter(
+      selectedSegments,
+      video.hasAudio,
+    );
 
     const completeOutput = (buffer: ArrayBuffer) => {
       const blob = new Blob([buffer], { type: OUTPUT_DETAILS.mimeType });
@@ -426,7 +573,8 @@ export default function VideoCompressor() {
       setPhase("complete");
     };
 
-    const browserAudioBitrate = Math.max(96, bitratePlan.audio);
+    const browserAudioBitrate =
+      video.hasAudio ? Math.max(96, bitratePlan.audio) : 0;
     const browserVideoBitrate = Math.max(
       MIN_VIDEO_BITRATE_KBPS,
       bitratePlan.total - browserAudioBitrate,
@@ -448,7 +596,7 @@ export default function VideoCompressor() {
             hardwareAcceleration: browserAcceleration,
           });
 
-          if (typeof AudioEncoder !== "undefined") {
+          if (video.hasAudio && typeof AudioEncoder !== "undefined") {
             if (
               compressionProfile === "compatible" &&
               await canEncodeAudio("aac", {
@@ -468,7 +616,7 @@ export default function VideoCompressor() {
         }
       }
 
-      if (canUseNativeEncoder && browserAudioCodec) {
+      if (canUseNativeEncoder && (!video.hasAudio || browserAudioCodec)) {
         try {
           const targetBytes = targetSize * 1_000_000;
           let requestedVideoBitrate = browserVideoBitrate * 1000;
@@ -498,18 +646,27 @@ export default function VideoCompressor() {
               input,
               output,
               tracks: "primary",
+              trim: {
+                start: segmentEnvelopeStart,
+                end: segmentEnvelopeEnd,
+              },
               video: {
                 codec: preferredVideoCodec,
                 bitrate: videoBitrate,
                 hardwareAcceleration: browserAcceleration,
                 keyFrameInterval: compressionProfile === "quality" ? 4 : undefined,
                 forceTranscode: true,
+                process: (sample) =>
+                  remapVideoSample(sample, nativeSegments),
               },
-              audio: {
-                codec: browserAudioCodec,
-                bitrate: browserAudioBitrate * 1000,
-                forceTranscode: true,
-              },
+              audio: video.hasAudio && browserAudioCodec
+                ? {
+                    codec: browserAudioCodec,
+                    bitrate: browserAudioBitrate * 1000,
+                    forceTranscode: true,
+                    process: createAudioSegmentProcessor(nativeSegments),
+                  }
+                : undefined,
               tags: {},
               showWarnings: false,
             });
@@ -598,9 +755,10 @@ export default function VideoCompressor() {
 
             const audioBitrate = browserAudioBitrate * 1000;
             const actualTotalBitrate =
-              (nativeBuffer.byteLength * 8) / video.duration;
+              (nativeBuffer.byteLength * 8) / selectedDuration;
             const desiredTotalBitrate =
-              (targetBytes * NATIVE_CORRECTION_TARGET * 8) / video.duration;
+              (targetBytes * NATIVE_CORRECTION_TARGET * 8) /
+              selectedDuration;
             const actualVideoBitrate = Math.max(
               MIN_VIDEO_BITRATE_KBPS * 1000,
               actualTotalBitrate - audioBitrate,
@@ -653,13 +811,15 @@ export default function VideoCompressor() {
 
       setPhase("pass-two");
       setProgress(10);
-      setStatusCopy("Analyzing video for efficient two-pass encoding");
+      setStatusCopy("Analyzing selected segments for two-pass encoding");
       ffmpegPassRef.current = 1;
       const firstPassCode = await ffmpeg.exec([
         "-i",
         inputName,
+        "-filter_complex",
+        videoSegmentFilter,
         "-map",
-        "0:v:0",
+        "[vout]",
         "-c:v",
         "libx264",
         "-b:v",
@@ -683,14 +843,15 @@ export default function VideoCompressor() {
 
       ffmpegPassRef.current = 2;
       setProgress(52);
-      setStatusCopy("Encoding the final compatibility MP4");
-      const encodeCode = await ffmpeg.exec([
+      setStatusCopy("Joining segments into the final compatibility MP4");
+      const secondPassArgs = [
         "-i",
         inputName,
+        "-filter_complex",
+        mediaSegmentFilter,
         "-map",
-        "0:v:0",
-        "-map",
-        "0:a?",
+        "[vout]",
+        ...(video.hasAudio ? ["-map", "[aout]"] : []),
         "-c:v",
         "libx264",
         "-b:v",
@@ -703,16 +864,16 @@ export default function VideoCompressor() {
         "2",
         "-passlogfile",
         "compression-pass",
-        "-c:a",
-        "aac",
-        "-b:a",
-        `${bitratePlan.audio}k`,
+        ...(video.hasAudio
+          ? ["-c:a", "aac", "-b:a", `${bitratePlan.audio}k`]
+          : []),
         "-movflags",
         "+faststart",
         "-map_metadata",
         "-1",
         outputName,
-      ]);
+      ];
+      const encodeCode = await ffmpeg.exec(secondPassArgs);
       if (encodeCode !== 0) throw new Error("The video encoding could not be completed.");
 
       setPhase("finalizing");
@@ -861,6 +1022,98 @@ export default function VideoCompressor() {
                   <div className="range-labels"><span>{bounds.min.toFixed(1)} MB</span><span>{bounds.max.toFixed(1)} MB</span></div>
                 </div>
 
+                <section className="segment-editor" aria-labelledby="segment-editor-title">
+                  <div className="segment-editor-heading">
+                    <div>
+                      <span id="segment-editor-title">Trim and join</span>
+                      <strong>{segments.length} {segments.length === 1 ? "segment" : "segments"} · {formatKeptDuration(selectedDuration)} kept</strong>
+                    </div>
+                    <button
+                      className="segment-add-button"
+                      type="button"
+                      onClick={addSegment}
+                      disabled={isProcessing || segments.length >= MAX_SEGMENTS}
+                    >
+                      <Plus /> Add segment
+                    </button>
+                  </div>
+
+                  <div className="segment-list">
+                    {segments.map((segment, index) => {
+                      const previousEnd =
+                        index === 0 ? 0 : segments[index - 1].end;
+                      const nextStart =
+                        index === segments.length - 1
+                          ? video.duration
+                          : segments[index + 1].start;
+                      const left = (segment.start / video.duration) * 100;
+                      const width =
+                        (segmentDuration(segment) / video.duration) * 100;
+
+                      return (
+                        <fieldset className="segment-card" key={segment.id}>
+                          <legend>Segment {index + 1}</legend>
+                          <button
+                            className="segment-remove-button"
+                            type="button"
+                            onClick={() => removeSegment(segment.id)}
+                            disabled={isProcessing || segments.length === 1}
+                            aria-label={`Remove segment ${index + 1}`}
+                          >
+                            <Trash />
+                          </button>
+                          <div className="segment-track" aria-hidden="true">
+                            <span style={{ left: `${left}%`, width: `${width}%` }} />
+                          </div>
+                          <div className="segment-time-grid">
+                            <label>
+                              <span>Start</span>
+                              <input
+                                className="segment-time-input"
+                                type="number"
+                                min={previousEnd}
+                                max={segment.end - MIN_SEGMENT_DURATION}
+                                step="0.1"
+                                value={segment.start}
+                                onChange={(event) =>
+                                  updateSegment(
+                                    segment.id,
+                                    "start",
+                                    Number(event.target.value),
+                                  )}
+                                disabled={isProcessing}
+                                aria-label={`Segment ${index + 1} start time`}
+                              />
+                            </label>
+                            <label>
+                              <span>End</span>
+                              <input
+                                className="segment-time-input"
+                                type="number"
+                                min={segment.start + MIN_SEGMENT_DURATION}
+                                max={nextStart}
+                                step="0.1"
+                                value={segment.end}
+                                onChange={(event) =>
+                                  updateSegment(
+                                    segment.id,
+                                    "end",
+                                    Number(event.target.value),
+                                  )}
+                                disabled={isProcessing}
+                                aria-label={`Segment ${index + 1} end time`}
+                              />
+                            </label>
+                          </div>
+                        </fieldset>
+                      );
+                    })}
+                  </div>
+                  <p className="segment-help">
+                    Keep any ordered ranges you need. Gaps are removed and every selected segment is joined into one MP4.
+                  </p>
+                </section>
+
                 <fieldset className="profile-fieldset" disabled={isProcessing}>
                   <legend>Encoding priority</legend>
                   <div className="profile-options">
@@ -896,6 +1149,7 @@ export default function VideoCompressor() {
                 {bitratePlan && (
                   <div className="estimate-grid">
                     <div className="estimate-item"><Gauge /><div><span className="estimate-label">Target / source bitrate</span><strong className="estimate-value">{bitratePlan.total.toLocaleString()} / {bitratePlan.source.toLocaleString()} kbps</strong></div></div>
+                    <div className="estimate-item"><Scissors /><div><span className="estimate-label">Kept / source duration</span><strong className="estimate-value">{formatKeptDuration(selectedDuration)} / {formatDuration(video.duration)}</strong></div></div>
                     <div className="estimate-item"><HardDrives /><div><span className="estimate-label">Estimated saving</span><strong className="estimate-value">{Math.max(0, Math.round((1 - targetSize * 1_000_000 / video.file.size) * 100))}%</strong></div></div>
                   </div>
                 )}
@@ -908,7 +1162,7 @@ export default function VideoCompressor() {
 
                 <div className="action-row">
                   <button className="primary-button" type="button" onClick={() => void compress()} disabled={isProcessing || bounds.min === bounds.max}>
-                    <SlidersHorizontal /> Compress video
+                    <Scissors /> Join segments and compress
                   </button>
                   {isProcessing && <button className="secondary-button" type="button" onClick={cancelCompression}><X /> Cancel</button>}
                 </div>
@@ -928,7 +1182,7 @@ export default function VideoCompressor() {
 
           {phase === "complete" && result && (
             <section className="result-panel" aria-live="polite">
-              <div className="result-summary"><CheckCircle weight="fill" /><div><h2>{OUTPUT_DETAILS.label} ready</h2><p>{formatBytes(result.size)} output from {formatBytes(video?.file.size ?? 0)} source · {Math.round(result.size / (targetSize * 1_000_000) * 100)}% of target</p></div></div>
+              <div className="result-summary"><CheckCircle weight="fill" /><div><h2>{OUTPUT_DETAILS.label} ready</h2><p>{segments.length} {segments.length === 1 ? "segment" : "segments"} joined · {formatBytes(result.size)} from {formatBytes(video?.file.size ?? 0)} · {Math.round(result.size / (targetSize * 1_000_000) * 100)}% of target</p></div></div>
               <div className="result-actions">
                 <button className="primary-button" type="button" onClick={() => void saveResult()} disabled={isSaving}><DownloadSimple /> {isSaving ? "Saving…" : `Save ${OUTPUT_DETAILS.label}`}</button>
                 <button className="secondary-button" type="button" onClick={() => { resetResult(); setPhase("ready"); }}>Adjust target</button>
